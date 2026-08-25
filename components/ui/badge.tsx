@@ -1,39 +1,50 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { Slot } from "radix-ui";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
+/**
+ * Square, not pill. A pill reads consumer; this shop's world is rubber stamps,
+ * masking tape, and bin labels. The three neutral variants map to the fill
+ * weights status uses (outline → tint → solid), so a badge can carry status
+ * without borrowing a hue.
+ */
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[3px] border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
-        outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+        /* Status fill weights */
+        outline: "border-rule bg-copy text-ink-soft",
+        tint: "border-rule bg-secondary text-ink",
+        solid: "border-ink bg-ink text-paper",
+
+        /* Urgency and meaning */
+        default: "border-bench bg-bench text-white",
+        bench: "border-bench/30 bg-bench-fill text-bench-ink",
+        flag: "border-flag/40 bg-flag-fill text-flag-ink",
+        stamp: "border-stamp/40 bg-stamp-fill text-stamp-ink",
+        destructive: "border-stamp bg-stamp text-white",
+        secondary: "border-rule bg-secondary text-ink",
+        ghost: "border-transparent text-ink-soft",
+        link: "border-transparent text-bench-ink underline-offset-4 [a&]:hover:underline",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "outline",
     },
-  }
-)
+  },
+);
 
 function Badge({
   className,
-  variant = "default",
+  variant = "outline",
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &
   VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : "span"
+  const Comp = asChild ? Slot.Root : "span";
 
   return (
     <Comp
@@ -42,7 +53,7 @@ function Badge({
       className={cn(badgeVariants({ variant }), className)}
       {...props}
     />
-  )
+  );
 }
 
-export { Badge, badgeVariants }
+export { Badge, badgeVariants };

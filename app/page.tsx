@@ -1,8 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { ArrowRight, ClipboardPen, RefreshCw } from "lucide-react";
 import { AgingStrip } from "@/components/tag/aging-strip";
+import { PageHeader } from "@/components/shell/page-header";
+import {
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelList,
+  PanelTitle,
+  PanelTools,
+} from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
+import { StatusChip } from "@/components/tag/status-chip";
 import { useQuery, useShop } from "@/lib/mock/store";
 import { agingOf, STATUS_META } from "@/lib/status";
 import { count, dueLabel, peso, shortAge } from "@/lib/format";
@@ -15,10 +27,10 @@ import { cn } from "@/lib/utils";
  */
 export default function Page() {
   const { db, failureRate, setFailureRate, reseed } = useShop();
-  const { data: summary, loading, error, refetch } = useQuery((api) => api.getDashboard());
-  const { data: tickets } = useQuery((api) =>
-    api.getTickets({ includeReleased: false }),
+  const { data: summary, loading, error, refetch } = useQuery((api) =>
+    api.getDashboard(),
   );
+  const { data: tickets } = useQuery((api) => api.getTickets({ includeReleased: false }));
 
   const openTickets = (tickets ?? []).filter(
     (ticket) => !STATUS_META[ticket.status].terminal,
@@ -26,84 +38,77 @@ export default function Page() {
   const urgent = openTickets.slice(0, 6);
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex items-baseline gap-3 border-b border-rule pb-2">
-        <h1 className="font-display text-base font-semibold text-ink">Day sheet</h1>
-        <span className="label-pad">Stage 2 — data layer check</span>
-        <Link href="/specimen" className="mono ml-auto text-xs text-bench-ink underline">
-          Design specimen
-        </Link>
-      </div>
+    <div className="page space-y-4 sm:space-y-5">
+      <PageHeader
+        eyebrow="Stage 2 — data layer check"
+        title="Day sheet"
+        description="The real day sheet lands in stage 8. This page reads live from the mock API so the seed, the aging scale, and the loading and error states can be checked."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/specimen">
+              Design specimen
+              <ArrowRight aria-hidden />
+            </Link>
+          </Button>
+        }
+      />
 
-      {error ? (
-        <div className="mt-4 flex items-start gap-3 border border-stamp bg-stamp-fill p-3">
-          <AlertTriangle className="mt-0.5 size-4 text-stamp-ink" aria-hidden />
-          <div className="text-sm">
-            <p className="font-semibold text-stamp-ink">{error.message}</p>
-            <p className="text-ink-soft">
-              {(error as { hint?: string }).hint ?? "Try again."}
-            </p>
-            <button
-              type="button"
-              onClick={refetch}
-              className="mt-2 inline-flex items-center gap-1.5 border border-rule bg-copy px-2 py-1 text-xs font-medium hover:bg-secondary"
-            >
-              <RefreshCw className="size-3" aria-hidden /> Try again
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {error ? <ErrorState error={error} onRetry={refetch} /> : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="border border-rule bg-copy">
-          <div className="flex items-center gap-2 border-b border-rule px-3 py-2">
-            <span className="label-bin text-ink">Most urgent open jobs</span>
-            <span className="mono ml-auto text-xs text-ink-faint">
-              {count(openTickets.length)} open
-            </span>
-          </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] sm:gap-5">
+        <Panel>
+          <PanelHeader>
+            <PanelTitle>Most urgent open jobs</PanelTitle>
+            <PanelTools>
+              <span className="mono text-xs text-ink-faint">
+                {count(openTickets.length)} open
+              </span>
+            </PanelTools>
+          </PanelHeader>
 
           {loading && !tickets ? (
-            <ul className="divide-y divide-rule-soft">
-              {[0, 1, 2, 3, 4, 5].map((row) => (
-                <li key={row} className="flex h-[52px] animate-pulse items-center gap-3 px-3">
-                  <span className="h-8 w-[3px] bg-secondary" />
-                  <span className="h-3 w-24 bg-secondary" />
-                  <span className="h-3 w-40 bg-secondary" />
-                </li>
-              ))}
-            </ul>
+            <LoadingRows rows={6} />
           ) : urgent.length === 0 ? (
-            <div className="px-3 py-8 text-center">
-              <p className="text-sm font-medium text-ink">No open job orders.</p>
-              <p className="mt-1 text-sm text-ink-soft">
-                Take a unit in at the counter to start the queue.
-              </p>
-            </div>
+            <EmptyState
+              icon={ClipboardPen}
+              title="No open job orders."
+              body="Take a unit in at the counter and it will appear here, oldest first."
+              action={
+                <Button asChild size="sm">
+                  <Link href="/intake">New job order</Link>
+                </Button>
+              }
+            />
           ) : (
-            <ul className="divide-y divide-rule-soft">
+            <PanelList>
               {urgent.map((ticket) => {
                 const aging = agingOf(ticket);
-                const customer = db.customers.find((entry) => entry.id === ticket.customerId);
+                const customer = db.customers.find(
+                  (entry) => entry.id === ticket.customerId,
+                );
+
                 return (
-                  <li key={ticket.id} className="flex items-stretch gap-3">
+                  <li key={ticket.id} className="group flex items-stretch gap-3">
                     <AgingStrip aging={aging} />
-                    <div className="flex min-w-0 flex-1 items-center gap-3 py-2 pr-3">
-                      <div className="min-w-0 flex-1">
+                    <div className="tap flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 py-2 pr-3">
+                      <div className="min-w-0 flex-1 basis-48">
                         <div className="flex items-center gap-2">
                           <span className="mono text-xs font-semibold text-ink">
                             {ticket.ticketNo}
                           </span>
-                          <span className="mono rounded-[2px] border border-rule px-1 text-[0.625rem] text-ink-soft">
-                            {STATUS_META[ticket.status].code}
-                          </span>
+                          <StatusChip status={ticket.status} showLabel={false} />
+                          {aging.stalled ? (
+                            <span className="label-pad text-[0.5625rem] text-flag-ink">
+                              stalled
+                            </span>
+                          ) : null}
                         </div>
-                        <p className="truncate text-sm text-ink">
+                        <p className="mt-0.5 truncate text-sm text-ink">
                           {customer?.name ?? "Walk-in"} · {ticket.device.brand}{" "}
                           {ticket.device.model}
                         </p>
                       </div>
-                      <div className="text-right">
+                      <div className="flex shrink-0 items-baseline gap-3 sm:block sm:text-right">
                         <p
                           className={cn(
                             "mono text-xs font-semibold",
@@ -121,23 +126,28 @@ export default function Page() {
                   </li>
                 );
               })}
-            </ul>
+            </PanelList>
           )}
-        </section>
+        </Panel>
 
-        <div className="space-y-4">
-          <section className="border border-rule bg-copy">
-            <div className="border-b border-rule px-3 py-2">
-              <span className="label-bin text-ink">Seed contents</span>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-1">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Seed contents</PanelTitle>
+            </PanelHeader>
             <dl className="divide-y divide-rule-soft">
               <Row label="Tickets" value={count(db.tickets.length)} />
               <Row label="Customers" value={count(db.customers.length)} />
               <Row
-                label="Inventory items"
-                value={`${count(db.items.length)} (${db.items.filter((i) => i.itemClass === "handset").length} / ${db.items.filter((i) => i.itemClass === "accessory").length} / ${db.items.filter((i) => i.itemClass === "spare_part").length})`}
+                label="Items (HS / AC / SP)"
+                value={`${db.items.filter((i) => i.itemClass === "handset").length} / ${db.items.filter((i) => i.itemClass === "accessory").length} / ${db.items.filter((i) => i.itemClass === "spare_part").length}`}
               />
-              <Row label="Handset units" value={count(db.items.reduce((sum, item) => sum + (item.units?.length ?? 0), 0))} />
+              <Row
+                label="Handset units"
+                value={count(
+                  db.items.reduce((sum, item) => sum + (item.units?.length ?? 0), 0),
+                )}
+              />
               <Row label="Stock movements" value={count(db.movements.length)} />
               <Row label="Sales (90 days)" value={count(db.sales.length)} />
               <Row label="Shifts" value={count(db.shifts.length)} />
@@ -148,13 +158,13 @@ export default function Page() {
               />
               <Row label="Low stock" value={summary ? count(summary.lowStock) : "—"} />
             </dl>
-          </section>
+          </Panel>
 
-          <section className="border border-rule bg-copy">
-            <div className="border-b border-rule px-3 py-2">
-              <span className="label-bin text-ink">Mock controls</span>
-            </div>
-            <div className="space-y-3 px-3 py-3">
+          <Panel>
+            <PanelHeader>
+              <PanelTitle>Mock controls</PanelTitle>
+            </PanelHeader>
+            <PanelBody className="space-y-4">
               <div>
                 <p className="label-pad">Simulated failure rate</p>
                 <div className="mt-1.5 flex gap-1">
@@ -163,8 +173,9 @@ export default function Page() {
                       key={rate}
                       type="button"
                       onClick={() => setFailureRate(rate)}
+                      aria-pressed={failureRate === rate}
                       className={cn(
-                        "mono flex-1 border px-2 py-1 text-xs",
+                        "mono tap flex-1 rounded-sm border px-2 text-xs transition-colors",
                         failureRate === rate
                           ? "border-bench bg-bench-fill font-semibold text-bench-ink"
                           : "border-rule bg-paper text-ink-soft hover:bg-secondary",
@@ -174,20 +185,16 @@ export default function Page() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-1.5 text-[0.6875rem] leading-snug text-ink-soft">
-                  Makes the mock API throw, so error states can be checked without
-                  a backend.
+                <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
+                  Makes the mock API throw, so error states can be checked without a
+                  backend.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={reseed}
-                className="inline-flex w-full items-center justify-center gap-1.5 border border-rule bg-paper px-2 py-1.5 text-xs font-medium hover:bg-secondary"
-              >
-                <RefreshCw className="size-3" aria-hidden /> Rebuild seed data
-              </button>
-            </div>
-          </section>
+              <Button variant="outline" size="sm" className="w-full" onClick={reseed}>
+                <RefreshCw aria-hidden /> Rebuild seed data
+              </Button>
+            </PanelBody>
+          </Panel>
         </div>
       </div>
     </div>
@@ -196,9 +203,9 @@ export default function Page() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between px-3 py-1.5">
-      <dt className="text-sm text-ink-soft">{label}</dt>
-      <dd className="mono text-sm font-medium text-ink">{value}</dd>
+    <div className="flex items-baseline justify-between gap-3 px-3 py-2 sm:px-4">
+      <dt className="min-w-0 truncate text-sm text-ink-soft">{label}</dt>
+      <dd className="mono shrink-0 text-sm font-medium text-ink">{value}</dd>
     </div>
   );
 }

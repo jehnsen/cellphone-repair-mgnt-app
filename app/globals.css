@@ -312,6 +312,22 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  /* Every layer that genuinely floats gets the same elevation, so menus,
+     sheets, and dialogs read as one system rather than three libraries. */
+  [data-slot="dropdown-menu-content"],
+  [data-slot="popover-content"],
+  [data-slot="select-content"],
+  [data-slot="command-dialog"],
+  [data-slot="dialog-content"],
+  [data-slot="sheet-content"] {
+    box-shadow: var(--shadow-float);
+    border-color: var(--rule);
+  }
+
+  [data-slot="tooltip-content"] {
+    box-shadow: var(--shadow-raised);
+  }
+
   /* The tag's perforated tear strip. Dots only render at >= 40px height;
      below that the strip stays solid so dense tables don't get noisy. */
   .perf-strip {

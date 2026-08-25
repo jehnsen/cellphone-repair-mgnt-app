@@ -26,7 +26,7 @@ export function RoleSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex h-8 items-center gap-2 rounded-sm border border-rule bg-copy px-2 text-left hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="flex h-9 items-center gap-2 rounded-sm border border-rule bg-copy px-2 text-left transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-8"
         aria-label={`Signed in as ${user.name}, ${ROLE_LABEL[user.role]}. Switch user`}
       >
         <span className="mono grid size-5 place-items-center bg-ink text-[0.625rem] font-semibold text-paper">

@@ -1,32 +1,41 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
+/**
+ * A ledger, not a card grid. Hairline rules, a sticky ruled header, compact
+ * rows, and numeric cells that are already tabular because the body font sets
+ * tnum globally. Wide tables scroll inside their own container so the page
+ * body never scrolls sideways.
+ */
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className="relative w-full overflow-x-auto overscroll-x-contain"
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom border-collapse text-sm", className)}
         {...props}
       />
     </div>
-  )
+  );
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        "sticky top-0 z-10 bg-copy [&_tr]:border-b [&_tr]:border-rule",
+        className,
+      )}
       {...props}
     />
-  )
+  );
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
@@ -36,7 +45,7 @@ function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
       className={cn("[&_tr:last-child]:border-0", className)}
       {...props}
     />
-  )
+  );
 }
 
 function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
@@ -44,12 +53,12 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
-        className
+        "border-t border-rule bg-paper/60 font-medium [&>tr]:last:border-b-0",
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
@@ -57,12 +66,12 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
-        className
+        "border-b border-rule-soft transition-colors hover:bg-paper/70 data-[state=selected]:bg-bench-fill",
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
@@ -70,12 +79,13 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
+        "label-bin h-9 whitespace-nowrap px-3 text-left align-middle text-ink-soft",
+        "[&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
@@ -83,34 +93,43 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
+        "px-3 py-2 align-middle text-ink",
+        "[&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
-function TableCaption({
-  className,
-  ...props
-}: React.ComponentProps<"caption">) {
+/** Money and quantities: right-aligned, mono, so columns compare by eye. */
+function TableNumeric({ className, ...props }: React.ComponentProps<"td">) {
+  return (
+    <TableCell
+      className={cn("mono whitespace-nowrap text-right tabular-nums", className)}
+      {...props}
+    />
+  );
+}
+
+function TableCaption({ className, ...props }: React.ComponentProps<"caption">) {
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      className={cn("mt-3 text-sm text-ink-soft", className)}
       {...props}
     />
-  )
+  );
 }
 
 export {
   Table,
-  TableHeader,
   TableBody,
+  TableCaption,
+  TableCell,
   TableFooter,
   TableHead,
+  TableHeader,
+  TableNumeric,
   TableRow,
-  TableCell,
-  TableCaption,
-}
+};
