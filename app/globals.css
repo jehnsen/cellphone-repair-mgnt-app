@@ -1,0 +1,347 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   Job Order — design tokens
+   Named palette from the design plan. Components must never use raw hex.
+   Every chromatic token ships three variants:
+     --x        surface / edge base
+     --x-ink    text-safe (>= 4.5:1 on --copy)
+     --x-fill   tinted background
+   ========================================================================== */
+
+:root {
+  /* --- named palette: light (carbon-copy pad under fluorescent light) --- */
+  --paper: #f5f2ec;
+  --copy: #ffffff;
+  --ink: #191b1f;
+  --ink-soft: #5b6068;
+  --ink-faint: #8a9099;
+  --rule: #cfc9ba;
+  --rule-soft: #e5e0d4;
+  /* Used where a boundary has to hold its own against a filled surface. */
+  --rule-strong: #b3ab99;
+
+  --bench: #0f6b57;
+  --bench-ink: #0b5445;
+  --bench-fill: #e2efea;
+
+  --stamp: #bf3b22;
+  --stamp-ink: #9c2f1a;
+  --stamp-fill: #fae8e3;
+
+  --flag: #b07a16;
+  --flag-ink: #8a5d0b;
+  --flag-fill: #f9f0d8;
+
+  /* --- aging scale: hue is spent on urgency, never on status --- */
+  --age-fresh: var(--rule);
+  --age-soon: var(--flag);
+  --age-today: var(--flag);
+  --age-over: var(--stamp);
+
+  /* --- chart ramp: ledger graphics, ink first, one accent --- */
+  --chart-1: var(--ink);
+  --chart-2: var(--bench);
+  --chart-3: var(--flag);
+  --chart-4: var(--stamp);
+  --chart-5: var(--ink-faint);
+
+  /* --- shadcn semantic layer, mapped onto the named palette --- */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--copy);
+  --card-foreground: var(--ink);
+  --popover: var(--copy);
+  --popover-foreground: var(--ink);
+  --primary: var(--bench);
+  --primary-foreground: #ffffff;
+  --secondary: #ebe7dd;
+  --secondary-foreground: var(--ink);
+  --muted: #eeebe3;
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--bench-fill);
+  --accent-foreground: var(--bench-ink);
+  --destructive: var(--stamp);
+  --destructive-foreground: #ffffff;
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: var(--bench);
+
+  --radius: 0.25rem;
+
+  /* --- elevation: spent only where a layer genuinely floats above the page.
+     Flat surfaces stay flat and are separated by rules, the way a form is. */
+  --shadow-panel: 0 1px 0 0 rgb(25 27 31 / 0.03);
+  --shadow-raised: 0 1px 2px -1px rgb(25 27 31 / 0.1), 0 1px 3px 0 rgb(25 27 31 / 0.06);
+  --shadow-float: 0 10px 24px -12px rgb(25 27 31 / 0.28), 0 2px 6px -2px rgb(25 27 31 / 0.12);
+  --shadow-strip: 0 1px 0 0 var(--rule), 0 6px 16px -14px rgb(25 27 31 / 0.5);
+}
+
+.dark {
+  /* --- the bench at night: warm neutral, never blue-grey inverted paper --- */
+  --paper: #1a1917;
+  --copy: #232220;
+  --ink: #f2efe8;
+  --ink-soft: #a8a49b;
+  --ink-faint: #7c786f;
+  --rule: #3a3833;
+  --rule-soft: #2d2b28;
+  --rule-strong: #4d4a43;
+
+  --bench: #3fbf9e;
+  --bench-ink: #6fd7bb;
+  --bench-fill: #16332c;
+
+  --stamp: #ff7a5c;
+  --stamp-ink: #ff9880;
+  --stamp-fill: #3a2019;
+
+  --flag: #e0a63a;
+  --flag-ink: #edbe63;
+  --flag-fill: #33280f;
+
+  --chart-1: #e7e3da;
+  --chart-2: var(--bench);
+  --chart-3: var(--flag);
+  --chart-4: var(--stamp);
+  --chart-5: var(--ink-faint);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--copy);
+  --card-foreground: var(--ink);
+  --popover: var(--copy);
+  --popover-foreground: var(--ink);
+  --primary: var(--bench);
+  --primary-foreground: #10221d;
+  --secondary: #2c2a27;
+  --secondary-foreground: var(--ink);
+  --muted: #2a2825;
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--bench-fill);
+  --accent-foreground: var(--bench-ink);
+  --destructive: var(--stamp);
+  --destructive-foreground: #2a120c;
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: var(--bench);
+
+  --shadow-panel: 0 1px 0 0 rgb(0 0 0 / 0.25);
+  --shadow-raised: 0 1px 2px -1px rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-float: 0 12px 28px -12px rgb(0 0 0 / 0.7), 0 2px 8px -2px rgb(0 0 0 / 0.5);
+  --shadow-strip: 0 1px 0 0 var(--rule), 0 8px 18px -16px rgb(0 0 0 / 0.9);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-copy: var(--copy);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-soft: var(--rule-soft);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-bench: var(--bench);
+  --color-bench-ink: var(--bench-ink);
+  --color-bench-fill: var(--bench-fill);
+  --color-stamp: var(--stamp);
+  --color-stamp-ink: var(--stamp-ink);
+  --color-stamp-fill: var(--stamp-fill);
+  --color-flag: var(--flag);
+  --color-flag-ink: var(--flag-ink);
+  --color-flag-fill: var(--flag-fill);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, "Cascadia Mono", monospace;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+
+  --shadow-panel: var(--shadow-panel);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-float: var(--shadow-float);
+  --shadow-strip: var(--shadow-strip);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Stops the strip from covering an anchored row on small screens. */
+    scroll-padding-top: 4rem;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    /* Money aligns in every table without opting in, per the type plan. */
+    font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--bench-fill);
+    color: var(--bench-ink);
+  }
+
+  /* Visible focus everywhere — accessibility floor, not a per-component choice. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  /* Thin, on-palette scrollbars: the board scrolls horizontally all day and a
+     default OS bar cutting through a column reads as damage. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--rule);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--rule-strong);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Preprinted field label from a job order pad. */
+  .label-pad {
+    font-family: var(--font-display);
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-soft;
+  }
+
+  /* Bin / column header, masking-tape label. */
+  .label-bin {
+    font-family: var(--font-display);
+    font-stretch: 88%;
+    @apply text-xs font-semibold uppercase tracking-[0.07em];
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Display type is set tight; the body face is not. Keeping this in one
+     place stops every heading from inventing its own tracking. */
+  .display-lg {
+    font-family: var(--font-display);
+    @apply text-xl font-semibold leading-tight tracking-[-0.012em] text-ink sm:text-2xl;
+  }
+
+  .display-md {
+    font-family: var(--font-display);
+    @apply text-base font-semibold leading-tight tracking-[-0.008em] text-ink sm:text-lg;
+  }
+
+  /* One page gutter, one vertical rhythm, everywhere. */
+  .page {
+    @apply mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-5 sm:py-5 lg:px-7 lg:py-6;
+  }
+
+  /* Rows that must stay legible when a finger, not a mouse, is doing the work. */
+  .tap {
+    @apply min-h-11 sm:min-h-9;
+  }
+
+  /* Clears the home indicator on phones with a bottom tab bar. */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* The tag's perforated tear strip. Dots only render at >= 40px height;
+     below that the strip stays solid so dense tables don't get noisy. */
+  .perf-strip {
+    background-image: radial-gradient(
+      circle at center,
+      var(--copy) 0 1.6px,
+      transparent 1.7px
+    );
+    background-size: 100% 9px;
+    background-position: center 4px;
+    background-repeat: repeat-y;
+  }
+
+  /* Overdue hatching — a redundant channel so lateness survives greyscale. */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      currentColor 0 2px,
+      transparent 2px 6px
+    );
+  }
+}
+
+@media print {
+  /* Paper is always the light token set, whatever the screen is doing. */
+  .dark {
+    color-scheme: light;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
