@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { buildDatabase } from "@/lib/mock/seed";
+import { buildDatabase, OWNER_ID } from "@/lib/mock/seed";
 import { createMockApi, type ShopApi } from "@/lib/mock/api";
 import { EMPTY_DB, shopReducer } from "@/lib/mock/reducer";
 import { failure } from "@/lib/mock/db";
@@ -18,8 +18,10 @@ import { can } from "@/lib/roles";
 import type { Database, Permission, Role, User } from "@/lib/types";
 
 /**
- * Session state lives here too: who we are pretending to be. There is no auth
- * — the role switcher just changes which permissions the shell hands out.
+ * Session state lives here too. The shop is a one-man operation: a single
+ * user owns, repairs, sells, and closes the drawer, so `can()` always
+ * answers yes. The Role/Permission machinery in lib/roles.ts is kept for
+ * the day a second person is hired.
  */
 
 interface ShopContextValue {
@@ -31,6 +33,8 @@ interface ShopContextValue {
   user: User;
   role: Role;
   setUserId: (userId: string) => void;
+  /** Clears the remembered identity. Not a security boundary — see roles.ts. */
+  signOut: () => void;
   can: (permission: Permission) => boolean;
   /** Demo control for error states. */
   failureRate: number;
@@ -41,12 +45,13 @@ interface ShopContextValue {
 const ShopContext = createContext<ShopContextValue | null>(null);
 
 const ROLE_STORAGE_KEY = "jo.userId";
+const DEFAULT_USER_ID = OWNER_ID;
 
 export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [db, rawDispatch] = useReducer(shopReducer, EMPTY_DB);
   const [version, setVersion] = useState(0);
   const [ready, setReady] = useState(false);
-  const [userId, setUserId] = useState<string>("u-cashier-1");
+  const [userId, setUserId] = useState<string>(DEFAULT_USER_ID);
   const [failureRate, setFailureRateState] = useState(0);
 
   /* The API reads the newest database without being rebuilt on every render. */
@@ -82,6 +87,13 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(ROLE_STORAGE_KEY, next);
   }, []);
 
+  /* Forget who was signed in, so returning to the app does not silently
+     resume the last session. The shop data itself is untouched. */
+  const signOut = useCallback(() => {
+    window.localStorage.removeItem(ROLE_STORAGE_KEY);
+    setUserId(DEFAULT_USER_ID);
+  }, []);
+
   const setFailureRate = useCallback((rate: number) => {
     failure.rate = rate;
     setFailureRateState(rate);
@@ -97,12 +109,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const user =
     db.users.find((entry) => entry.id === userId) ??
     db.users[0] ?? {
-      id: "u-cashier-1",
+      id: OWNER_ID,
       name: "Counter",
       initials: "CT",
-      role: "cashier" as Role,
+      role: "owner" as Role,
       active: true,
-      isTechnician: false,
+      isTechnician: true,
     };
 
   const value = useMemo<ShopContextValue>(
@@ -114,12 +126,24 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       user,
       role: user.role,
       setUserId: handleSetUserId,
+      signOut,
       can: (permission: Permission) => can(user.role, permission),
       failureRate,
       setFailureRate,
       reseed,
     }),
-    [db, api, version, ready, user, handleSetUserId, failureRate, setFailureRate, reseed],
+    [
+      db,
+      api,
+      version,
+      ready,
+      user,
+      handleSetUserId,
+      signOut,
+      failureRate,
+      setFailureRate,
+      reseed,
+    ],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;

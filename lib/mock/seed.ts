@@ -157,6 +157,9 @@ interface PendingMove {
   by: string;
 }
 
+/** The shop's only user. Everything that records an actor points here. */
+export const OWNER_ID = "u-owner";
+
 /**
  * Builds the whole shop, deterministically, relative to `now`.
  * Called once per session by the store; a real backend replaces this file
@@ -171,7 +174,7 @@ export function buildDatabase(now: Date = new Date()): Database {
   /* ── Shop ─────────────────────────────────────────────────────────── */
 
   const shop: Database["shop"] = {
-    name: "Bagong Buhay Cellphone Repair",
+    name: "Bonalos Cellphone Repair",
     addressLine: "Stall 14, Ground Floor, Sto. Cristo Commercial Center",
     city: "Quezon City, Metro Manila",
     mobile: "0917 555 0142",
@@ -189,18 +192,23 @@ export function buildDatabase(now: Date = new Date()): Database {
 
   /* ── Users ────────────────────────────────────────────────────────── */
 
+  /* A one-man shop: the owner takes the unit in, fixes it, rings it up, and
+     closes the drawer. The Role/Permission types still exist for the day a
+     second pair of hands is hired, but nothing branches on them today. */
   const users: User[] = [
-    { id: "u-owner", name: "Ador Bernardo", initials: "AB", role: "owner", mobile: "09175550101", active: true, isTechnician: false },
-    { id: "u-manager", name: "Lourdes Fajardo", initials: "LF", role: "manager", mobile: "09175550102", active: true, isTechnician: false },
-    { id: "u-cashier-1", name: "Bea Marasigan", initials: "BM", role: "cashier", mobile: "09175550103", active: true, isTechnician: false },
-    { id: "u-cashier-2", name: "Kyle Ordoñez", initials: "KO", role: "cashier", mobile: "09175550104", active: true, isTechnician: false },
-    { id: "u-tech-1", name: "Jomar Delos Santos", initials: "JD", role: "technician", mobile: "09175550105", active: true, isTechnician: true },
-    { id: "u-tech-2", name: "Rhea Bantugan", initials: "RB", role: "technician", mobile: "09175550106", active: true, isTechnician: true },
-    { id: "u-tech-3", name: "Elmer Pacheco", initials: "EP", role: "technician", mobile: "09175550107", active: true, isTechnician: true },
+    {
+      id: OWNER_ID,
+      name: "Ador Bernardo",
+      initials: "AB",
+      role: "owner",
+      mobile: "09175550101",
+      active: true,
+      isTechnician: true,
+    },
   ];
 
-  const technicians = users.filter((user) => user.isTechnician);
-  const cashiers = users.filter((user) => user.role === "cashier");
+  const technicians = users;
+  const cashiers = users;
 
   /* ── Suppliers ────────────────────────────────────────────────────── */
 

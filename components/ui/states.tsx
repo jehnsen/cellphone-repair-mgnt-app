@@ -56,7 +56,7 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex items-start gap-3 border border-stamp bg-stamp-fill px-3 py-3 sm:px-4",
+        "flex items-start gap-3 rounded-lg border border-stamp bg-stamp-fill px-3 py-3 sm:px-4",
         className,
       )}
     >

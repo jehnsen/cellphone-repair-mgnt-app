@@ -2,10 +2,10 @@ import { cn } from "@/lib/utils";
 import type { Aging } from "@/lib/status";
 
 /**
- * The tear strip down the left edge of every tag — board card, table row,
- * detail head, printed stub. It is the only element allowed to carry colour
- * for urgency, and it always pairs colour with width and pattern so the read
- * survives greyscale, colour blindness, and a two-foot glance.
+ * The accent bar down the left edge of every tag — board card, table row,
+ * detail head. It is the only element allowed to carry colour for urgency,
+ * and it always pairs colour with width so the read survives greyscale,
+ * colour blindness, and a two-foot glance.
  */
 export function AgingStrip({
   aging,
@@ -13,30 +13,28 @@ export function AgingStrip({
   className,
 }: {
   aging: Aging;
-  /** Perforation dots only read above ~40px; dense rows keep a solid strip. */
+  /** Kept for call-site compatibility; the perforation motif was retired. */
   perforated?: boolean;
   className?: string;
 }) {
   const { tier } = aging;
+  void perforated;
 
   return (
     <span
       aria-hidden
       className={cn(
-        "relative block h-full shrink-0",
-        tier === "overdue" ? "w-1.5" : "w-[3px]",
+        /* self-stretch, not h-full: the parent row rarely has a resolved
+           height, so h-full collapses the strip to nothing. */
+        "block shrink-0 self-stretch rounded-full",
+        tier === "overdue" ? "w-1.5" : "w-1",
         tier === "fresh" && "bg-rule",
         tier === "soon" && "bg-flag",
         tier === "today" && "bg-flag",
         tier === "overdue" && "bg-stamp",
         className,
       )}
-    >
-      {tier === "today" ? (
-        <span className="hatch absolute inset-0 text-copy opacity-70" />
-      ) : null}
-      {perforated ? <span className="perf-strip absolute inset-0" /> : null}
-    </span>
+    />
   );
 }
 

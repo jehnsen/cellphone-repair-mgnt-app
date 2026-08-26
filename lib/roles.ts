@@ -1,8 +1,16 @@
 import type { Permission, Role } from "@/lib/types";
 
 /**
- * The permission matrix Settings renders and every guard reads.
- * No auth logic here — the role switcher just changes who we pretend to be.
+ * The permission matrix, kept but currently dormant.
+ *
+ * The shop is a one-man operation: a single seeded user owns it, repairs the
+ * units, rings up the sales, and closes the drawer. Nothing in the UI branches
+ * on `can()` any more — every screen is simply available. This file stays so
+ * that hiring a second person is a matter of seeding another user and putting
+ * the guards back, rather than re-modelling the domain.
+ *
+ * Never a security boundary either way: there is no auth, and these checks
+ * would run in the browser. A real build enforces permissions on the server.
  */
 
 export const ROLE_LABEL: Record<Role, string> = {

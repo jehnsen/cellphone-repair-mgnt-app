@@ -5,13 +5,12 @@ import { Slot } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 /**
- * Square, not pill. A pill reads consumer; this shop's world is rubber stamps,
- * masking tape, and bin labels. The three neutral variants map to the fill
+ * Pill-shaped, tech-retail style. The three neutral variants map to the fill
  * weights status uses (outline → tint → solid), so a badge can carry status
  * without borrowing a hue.
  */
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[3px] border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {

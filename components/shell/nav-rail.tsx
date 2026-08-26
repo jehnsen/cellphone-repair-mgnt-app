@@ -54,12 +54,12 @@ export function NavRail({
           title={db.shop.name}
         >
           {collapsed ? (
-            <span className="mono grid size-8 place-items-center bg-ink text-[0.6875rem] font-semibold text-paper">
+            <span className="mono grid size-8 place-items-center rounded-lg bg-bench text-[0.6875rem] font-semibold text-white">
               JO
             </span>
           ) : (
             <>
-              <span className="label-pad block text-[0.625rem]">Job order</span>
+              {/* <span className="label-pad block text-[0.625rem]">Job order</span> */}
               <span className="mt-0.5 block truncate font-display text-sm font-semibold leading-tight tracking-[-0.008em] text-ink">
                 {db.shop.name || "Repair shop"}
               </span>

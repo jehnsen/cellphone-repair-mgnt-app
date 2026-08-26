@@ -5,7 +5,7 @@
 
 /* ==========================================================================
    Job Order — design tokens
-   Named palette from the design plan. Components must never use raw hex.
+   Sleek tech-retail palette. Components must never use raw hex.
    Every chromatic token ships three variants:
      --x        surface / edge base
      --x-ink    text-safe (>= 4.5:1 on --copy)
@@ -13,28 +13,28 @@
    ========================================================================== */
 
 :root {
-  /* --- named palette: light (carbon-copy pad under fluorescent light) --- */
-  --paper: #f5f2ec;
+  /* --- named palette: light (showroom counter, daylight) --- */
+  --paper: #f6f7f9;
   --copy: #ffffff;
-  --ink: #191b1f;
-  --ink-soft: #5b6068;
-  --ink-faint: #8a9099;
-  --rule: #cfc9ba;
-  --rule-soft: #e5e0d4;
+  --ink: #0f172a;
+  --ink-soft: #5b6472;
+  --ink-faint: #94a0b1;
+  --rule: #e2e5eb;
+  --rule-soft: #edeef2;
   /* Used where a boundary has to hold its own against a filled surface. */
-  --rule-strong: #b3ab99;
+  --rule-strong: #c7ccd6;
 
-  --bench: #0f6b57;
-  --bench-ink: #0b5445;
-  --bench-fill: #e2efea;
+  --bench: #2563eb;
+  --bench-ink: #1d4ed8;
+  --bench-fill: #e8f0fe;
 
-  --stamp: #bf3b22;
-  --stamp-ink: #9c2f1a;
-  --stamp-fill: #fae8e3;
+  --stamp: #dc2626;
+  --stamp-ink: #b91c1c;
+  --stamp-fill: #fdecec;
 
-  --flag: #b07a16;
-  --flag-ink: #8a5d0b;
-  --flag-fill: #f9f0d8;
+  --flag: #d97706;
+  --flag-ink: #b45309;
+  --flag-fill: #fef3e2;
 
   /* --- aging scale: hue is spent on urgency, never on status --- */
   --age-fresh: var(--rule);
@@ -42,12 +42,21 @@
   --age-today: var(--flag);
   --age-over: var(--stamp);
 
-  /* --- chart ramp: ledger graphics, ink first, one accent --- */
-  --chart-1: var(--ink);
-  --chart-2: var(--bench);
+  /* --- chart ramp: ink first, one accent --- */
+  --chart-1: var(--bench);
+  --chart-2: var(--ink);
   --chart-3: var(--flag);
   --chart-4: var(--stamp);
   --chart-5: var(--ink-faint);
+
+  /* --- report series: the three revenue lines the shop actually has.
+     Validated as a categorical set against --copy in both modes (lightness
+     band, chroma floor, CVD separation, normal-vision floor, contrast).
+     Do not re-step one of these by eye — re-run the validator. --- */
+  --series-repair: #2563eb;
+  --series-handset: #d97706;
+  --series-accessory: #0d9488;
+  --grid: var(--rule-soft);
 
   /* --- shadcn semantic layer, mapped onto the named palette --- */
   --background: var(--paper);
@@ -58,9 +67,9 @@
   --popover-foreground: var(--ink);
   --primary: var(--bench);
   --primary-foreground: #ffffff;
-  --secondary: #ebe7dd;
+  --secondary: #eef1f5;
   --secondary-foreground: var(--ink);
-  --muted: #eeebe3;
+  --muted: #eef1f5;
   --muted-foreground: var(--ink-soft);
   --accent: var(--bench-fill);
   --accent-foreground: var(--bench-ink);
@@ -70,44 +79,49 @@
   --input: var(--rule);
   --ring: var(--bench);
 
-  --radius: 0.25rem;
+  --radius: 0.625rem;
 
-  /* --- elevation: spent only where a layer genuinely floats above the page.
-     Flat surfaces stay flat and are separated by rules, the way a form is. */
-  --shadow-panel: 0 1px 0 0 rgb(25 27 31 / 0.03);
-  --shadow-raised: 0 1px 2px -1px rgb(25 27 31 / 0.1), 0 1px 3px 0 rgb(25 27 31 / 0.06);
-  --shadow-float: 0 10px 24px -12px rgb(25 27 31 / 0.28), 0 2px 6px -2px rgb(25 27 31 / 0.12);
-  --shadow-strip: 0 1px 0 0 var(--rule), 0 6px 16px -14px rgb(25 27 31 / 0.5);
+  /* --- elevation: soft, real shadows — surfaces float above the page. --- */
+  --shadow-panel: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow-raised: 0 2px 4px -1px rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.08);
+  --shadow-float: 0 16px 32px -12px rgb(15 23 42 / 0.18), 0 4px 12px -4px rgb(15 23 42 / 0.1);
+  --shadow-strip: 0 1px 0 0 var(--rule), 0 8px 20px -16px rgb(15 23 42 / 0.35);
 }
 
 .dark {
-  /* --- the bench at night: warm neutral, never blue-grey inverted paper --- */
-  --paper: #1a1917;
-  --copy: #232220;
-  --ink: #f2efe8;
-  --ink-soft: #a8a49b;
-  --ink-faint: #7c786f;
-  --rule: #3a3833;
-  --rule-soft: #2d2b28;
-  --rule-strong: #4d4a43;
+  /* --- the showroom at night: cool charcoal, never sepia --- */
+  --paper: #0b0f17;
+  --copy: #131926;
+  --ink: #eef1f6;
+  --ink-soft: #9aa4b6;
+  --ink-faint: #647089;
+  --rule: #232b3d;
+  --rule-soft: #1a2130;
+  --rule-strong: #333e56;
 
-  --bench: #3fbf9e;
-  --bench-ink: #6fd7bb;
-  --bench-fill: #16332c;
+  --bench: #3b82f6;
+  --bench-ink: #60a5fa;
+  --bench-fill: #16233d;
 
-  --stamp: #ff7a5c;
-  --stamp-ink: #ff9880;
-  --stamp-fill: #3a2019;
+  --stamp: #f87171;
+  --stamp-ink: #fca5a5;
+  --stamp-fill: #3a1a1a;
 
-  --flag: #e0a63a;
-  --flag-ink: #edbe63;
-  --flag-fill: #33280f;
+  --flag: #f0a63a;
+  --flag-ink: #fbbf5c;
+  --flag-fill: #3a2712;
 
-  --chart-1: #e7e3da;
-  --chart-2: var(--bench);
+  --chart-1: var(--bench);
+  --chart-2: #e7ebf3;
   --chart-3: var(--flag);
   --chart-4: var(--stamp);
   --chart-5: var(--ink-faint);
+
+  /* Same three steps: they validate against the dark --copy as well. */
+  --series-repair: #2563eb;
+  --series-handset: #d97706;
+  --series-accessory: #0d9488;
+  --grid: var(--rule);
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -116,23 +130,23 @@
   --popover: var(--copy);
   --popover-foreground: var(--ink);
   --primary: var(--bench);
-  --primary-foreground: #10221d;
-  --secondary: #2c2a27;
+  --primary-foreground: #0a1526;
+  --secondary: #1a2130;
   --secondary-foreground: var(--ink);
-  --muted: #2a2825;
+  --muted: #1a2130;
   --muted-foreground: var(--ink-soft);
   --accent: var(--bench-fill);
   --accent-foreground: var(--bench-ink);
   --destructive: var(--stamp);
-  --destructive-foreground: #2a120c;
+  --destructive-foreground: #2a0f0f;
   --border: var(--rule);
   --input: var(--rule);
   --ring: var(--bench);
 
-  --shadow-panel: 0 1px 0 0 rgb(0 0 0 / 0.25);
-  --shadow-raised: 0 1px 2px -1px rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.35);
-  --shadow-float: 0 12px 28px -12px rgb(0 0 0 / 0.7), 0 2px 8px -2px rgb(0 0 0 / 0.5);
-  --shadow-strip: 0 1px 0 0 var(--rule), 0 8px 18px -16px rgb(0 0 0 / 0.9);
+  --shadow-panel: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-raised: 0 2px 4px -1px rgb(0 0 0 / 0.45), 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-float: 0 20px 36px -12px rgb(0 0 0 / 0.65), 0 4px 14px -4px rgb(0 0 0 / 0.5);
+  --shadow-strip: 0 1px 0 0 var(--rule), 0 8px 20px -16px rgb(0 0 0 / 0.8);
 }
 
 @theme inline {
@@ -180,6 +194,11 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  --color-series-repair: var(--series-repair);
+  --color-series-handset: var(--series-handset);
+  --color-series-accessory: var(--series-accessory);
+  --color-grid: var(--grid);
 
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
@@ -285,6 +304,15 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Big standalone numbers — stat tiles, hero figures. Tabular digits give
+     every glyph a zero's width, which reads loose at display sizes; columns
+     that must align vertically keep .mono instead. */
+  .figure {
+    font-family: var(--font-display);
+    font-variant-numeric: proportional-nums;
+    @apply font-semibold leading-none tracking-[-0.015em] text-ink;
+  }
+
   /* Display type is set tight; the body face is not. Keeping this in one
      place stops every heading from inventing its own tracking. */
   .display-lg {
@@ -326,28 +354,6 @@
 
   [data-slot="tooltip-content"] {
     box-shadow: var(--shadow-raised);
-  }
-
-  /* The tag's perforated tear strip. Dots only render at >= 40px height;
-     below that the strip stays solid so dense tables don't get noisy. */
-  .perf-strip {
-    background-image: radial-gradient(
-      circle at center,
-      var(--copy) 0 1.6px,
-      transparent 1.7px
-    );
-    background-size: 100% 9px;
-    background-position: center 4px;
-    background-repeat: repeat-y;
-  }
-
-  /* Overdue hatching — a redundant channel so lateness survives greyscale. */
-  .hatch {
-    background-image: repeating-linear-gradient(
-      45deg,
-      currentColor 0 2px,
-      transparent 2px 6px
-    );
   }
 }
 

@@ -1,12 +1,8 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The one surface in the system. A ruled box with a taped label header — the
- * screen equivalent of a labelled parts bin. Everything that isn't a tag, a
- * table, or a form field sits in one of these.
- *
- * Deliberately flat: separation comes from the rule, not from a shadow.
- * Elevation is reserved for layers that genuinely float (menus, sheets).
+ * The one surface in the system. A rounded card with a soft shadow —
+ * everything that isn't a tag, a table, or a form field sits in one of these.
  */
 export function Panel({
   className,
@@ -16,7 +12,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-col border border-rule bg-copy shadow-panel",
+        "flex min-w-0 flex-col rounded-lg border border-rule bg-copy shadow-raised",
         className,
       )}
       {...props}

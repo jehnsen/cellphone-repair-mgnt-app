@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { NavRail } from "@/components/shell/nav-rail";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { ShiftStrip } from "@/components/shell/shift-strip";
@@ -10,11 +11,15 @@ import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "jo.railCollapsed";
 
+/** Routes that own the whole viewport and get no nav rail or shift strip. */
+const BARE_ROUTES = ["/login"];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { ready } = useShop();
+  const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const { data: summary, loading } = useQuery((api) => api.getDashboard());
+  const { data: summary } = useQuery((api) => api.getDashboard());
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
@@ -32,6 +37,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ready: summary?.readyForPickup ?? 0,
     lowStock: summary?.lowStock ?? 0,
   };
+
+  /* Login owns its viewport and its own loading copy. */
+  if (BARE_ROUTES.includes(pathname)) {
+    return <>{children}</>;
+  }
 
   if (!ready) {
     return (
@@ -81,11 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <ShiftStrip
-          summary={summary}
-          loading={loading}
-          onOpenNav={() => setNavOpen(true)}
-        />
+        <ShiftStrip onOpenNav={() => setNavOpen(true)} />
         <main id="main" className="min-w-0 flex-1 pb-16 md:pb-0">
           {children}
         </main>

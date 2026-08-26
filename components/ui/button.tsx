@@ -6,19 +6,19 @@ import { cn } from "@/lib/utils";
 
 /**
  * shadcn's Button, restyled onto the shop palette. Same API, same slots — the
- * changes are: square-ish corners, a real 44px touch target on phones that
+ * changes are: rounded corners, a real 44px touch target on phones that
  * relaxes to 36px on pointer devices, and focus that uses the bench ring
  * instead of a translucent halo.
  */
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-stamp [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-45 aria-invalid:border-stamp [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          "bg-bench text-white shadow-panel hover:bg-bench-ink active:bg-bench-ink",
+          "bg-bench text-white shadow-raised hover:bg-bench-ink active:bg-bench-ink",
         destructive:
-          "bg-stamp text-white shadow-panel hover:bg-stamp-ink active:bg-stamp-ink",
+          "bg-stamp text-white shadow-raised hover:bg-stamp-ink active:bg-stamp-ink",
         outline:
           "border border-rule bg-copy text-ink shadow-panel hover:border-rule-strong hover:bg-secondary",
         secondary: "bg-secondary text-ink hover:bg-secondary/70",

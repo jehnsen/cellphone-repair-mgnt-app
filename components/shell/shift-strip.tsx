@@ -2,30 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Menu, Moon, Search, Sun, X } from "lucide-react";
+import { LogOut, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useTheme } from "next-themes";
-import Link from "next/link";
-import { RoleSwitcher } from "@/components/shell/role-switcher";
-import { peso } from "@/lib/format";
+import { useShop } from "@/lib/mock/store";
 import { cn } from "@/lib/utils";
-import type { DashboardSummary } from "@/lib/mock/api";
 
 interface ShiftStripProps {
-  summary?: DashboardSummary;
-  loading: boolean;
   onOpenNav: () => void;
 }
 
 /**
- * The one strip that never changes across screens. It exists to answer the
- * three questions a counter asks mid-transaction — how much is in the drawer,
- * what is waiting to be picked up, what is late — without leaving the page.
- *
- * Below md the three stats drop to their own scrollable row, because losing
- * them entirely on a phone would defeat the point of the strip.
+ * The one strip that never changes across screens: search, theme, who you are,
+ * and the way out. The day's counts live on the day sheet rather than here.
  */
-export function ShiftStrip({ summary, loading, onOpenNav }: ShiftStripProps) {
+export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
   const router = useRouter();
+  const { user, signOut } = useShop();
   const [term, setTerm] = useState("");
   const [scrolled, setScrolled] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
@@ -60,34 +52,6 @@ export function ShiftStrip({ summary, loading, onOpenNav }: ShiftStripProps) {
     if (!value) return;
     router.push(`/board?q=${encodeURIComponent(value)}`);
   };
-
-  const stats = (
-    <>
-      <StripStat
-        label="Drawer"
-        value={
-          loading
-            ? "—"
-            : summary?.cashOnHand === null || summary?.cashOnHand === undefined
-              ? "No shift"
-              : peso(summary.cashOnHand, { whole: true })
-        }
-        href="/pos/shift"
-        muted={summary?.cashOnHand === null}
-      />
-      <StripStat
-        label="Ready"
-        value={loading ? "—" : String(summary?.readyForPickup ?? 0)}
-        href="/release"
-      />
-      <StripStat
-        label="Overdue"
-        value={loading ? "—" : String(summary?.overdue ?? 0)}
-        href="/board?overdue=1"
-        alert={(summary?.overdue ?? 0) > 0}
-      />
-    </>
-  );
 
   return (
     <div
@@ -139,14 +103,10 @@ export function ShiftStrip({ summary, loading, onOpenNav }: ShiftStripProps) {
         </form>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <div className="hidden items-stretch self-stretch divide-x divide-rule border-x border-rule md:flex">
-            {stats}
-          </div>
-
           <button
             type="button"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="grid size-9 place-items-center rounded-sm border border-rule text-ink-soft transition-colors hover:bg-secondary sm:size-8"
+            className="grid size-9 place-items-center rounded-full border border-rule text-ink-soft transition-colors hover:bg-secondary sm:size-8"
             aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
           >
             {resolvedTheme === "dark" ? (
@@ -156,47 +116,30 @@ export function ShiftStrip({ summary, loading, onOpenNav }: ShiftStripProps) {
             )}
           </button>
 
-          <RoleSwitcher />
+          {/* One operator, so this names them rather than offering a switch. */}
+          <span className="flex items-center gap-2 rounded-full border border-rule bg-copy py-1 pl-1 pr-2.5">
+            <span className="mono grid size-6 shrink-0 place-items-center rounded-full bg-ink text-[0.625rem] font-semibold text-paper">
+              {user.initials}
+            </span>
+            <span className="hidden text-xs font-medium leading-none text-ink sm:block">
+              {user.name}
+            </span>
+          </span>
+
+          <button
+            type="button"
+            onClick={() => {
+              signOut();
+              router.push("/login");
+            }}
+            className="grid size-9 place-items-center rounded-full border border-rule text-ink-soft transition-colors hover:border-stamp/40 hover:bg-stamp-fill hover:text-stamp-ink sm:size-8"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut className="size-4" aria-hidden />
+          </button>
         </div>
       </header>
-
-      <div className="flex items-stretch divide-x divide-rule border-t border-rule-soft md:hidden">
-        {stats}
-      </div>
     </div>
-  );
-}
-
-function StripStat({
-  label,
-  value,
-  href,
-  alert,
-  muted,
-}: {
-  label: string;
-  value: string;
-  href: string;
-  alert?: boolean;
-  muted?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "flex flex-1 flex-col justify-center px-3 py-1.5 leading-none transition-colors hover:bg-secondary md:min-w-[6rem] md:flex-none md:py-0",
-        alert && "bg-stamp-fill hover:bg-stamp-fill/70",
-      )}
-    >
-      <span className="label-pad text-[0.625rem]">{label}</span>
-      <span
-        className={cn(
-          "mono mt-1 text-sm font-semibold md:mt-0.5",
-          alert ? "text-stamp-ink" : muted ? "text-ink-faint" : "text-ink",
-        )}
-      >
-        {value}
-      </span>
-    </Link>
   );
 }

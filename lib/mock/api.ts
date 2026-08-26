@@ -1,4 +1,5 @@
 import { manilaDayKey, money } from "@/lib/format";
+import { computeTax } from "@/lib/vat";
 import { agingOf, STATUS_META } from "@/lib/status";
 import { nextSequence } from "@/lib/mock/seed";
 import {
@@ -18,11 +19,20 @@ import type {
   Customer,
   Database,
   DeviceInfo,
+  Discount,
+  HandsetCondition,
+  HandsetUnit,
+  HandsetUnitStatus,
   ID,
+  MovementReason,
   InventoryItem,
   Payment,
+  PaymentMethod,
   ProblemTag,
   Sale,
+  SaleLine,
+  SaleLineKind,
+  SalePayment,
   Shift,
   StockMovement,
   Supplier,
@@ -55,6 +65,77 @@ export interface NewTicketInput {
   createdBy: ID;
 }
 
+export interface NewSaleInput {
+  customerId?: ID;
+  lines: {
+    kind: SaleLineKind;
+    /** Omitted for ad-hoc service lines. */
+    itemId?: ID;
+    /** Handset lines must name the exact unit. */
+    unitId?: ID;
+    sku: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    unitCost: number;
+    discount?: Discount;
+  }[];
+  orderDiscount?: Discount;
+  /** Statutory relief. The ID is captured on the sale, not just the customer. */
+  seniorPwd?: {
+    idNumber: string;
+    type: "senior" | "pwd";
+    name: string;
+    beneficiaries: number;
+  };
+  payments: {
+    method: PaymentMethod;
+    amount: number;
+    reference?: string;
+    tendered?: number;
+  }[];
+  officialReceiptNo?: string;
+  note?: string;
+  cashierId: ID;
+}
+
+export interface ReceiveStockInput {
+  itemId: ID;
+  /** accessory + spare_part. Handsets are received as units instead. */
+  quantity?: number;
+  /** handset only: one row per physical unit, each with its own IMEI. */
+  units?: {
+    imei: string;
+    condition: HandsetCondition;
+    cost: number;
+    price: number;
+    storage?: string;
+    color?: string;
+    warrantyDays: number;
+  }[];
+  unitCost?: number;
+  supplierId?: ID;
+  /** Delivery receipt number. */
+  reference?: string;
+  note?: string;
+  userId: ID;
+}
+
+export interface AdjustStockInput {
+  itemId: ID;
+  /** Signed: -2 damaged, +1 found on a recount. Ignored for handset units. */
+  quantity?: number;
+  /** handset only: retire or restore one unit. */
+  unitId?: ID;
+  unitStatus?: HandsetUnitStatus;
+  reason: Extract<
+    MovementReason,
+    "damaged" | "lost" | "count_correction" | "return_supplier" | "return_customer"
+  >;
+  note?: string;
+  userId: ID;
+}
+
 export interface DashboardSummary {
   todaySales: number;
   todaySaleCount: number;
@@ -79,14 +160,18 @@ export interface ShopApi {
   getCustomers(query?: CustomerQuery): Promise<Customer[]>;
   getCustomer(id: ID): Promise<Customer>;
   createCustomer(input: Omit<Customer, "id" | "createdAt">): Promise<Customer>;
+  updateCustomer(input: { id: ID } & Partial<Omit<Customer, "id" | "createdAt">>): Promise<Customer>;
 
   getItems(query?: ItemQuery): Promise<InventoryItem[]>;
   getItem(id: ID): Promise<InventoryItem>;
   getMovements(itemId?: ID): Promise<StockMovement[]>;
   getSuppliers(): Promise<Supplier[]>;
+  receiveStock(input: ReceiveStockInput): Promise<InventoryItem>;
+  adjustStock(input: AdjustStockInput): Promise<InventoryItem>;
 
   getSales(query?: SaleQuery): Promise<Sale[]>;
   getSale(id: ID): Promise<Sale>;
+  createSale(input: NewSaleInput): Promise<Sale>;
 
   getUsers(): Promise<User[]>;
   getShifts(): Promise<Shift[]>;
@@ -120,6 +205,12 @@ export interface ShopApi {
   }): Promise<Ticket[]>;
   addNote(input: { ticketId: ID; note: string; actorId: ID }): Promise<TimelineEvent>;
   markReadyForPickup(input: { ticketIds: ID[]; actorId: ID }): Promise<Ticket[]>;
+  releaseTicket(input: {
+    ticketId: ID;
+    releasedTo: string;
+    payment?: { amount: number; method: Payment["method"]; reference?: string };
+    actorId: ID;
+  }): Promise<Ticket>;
 
   getDashboard(): Promise<DashboardSummary>;
 }
@@ -248,6 +339,23 @@ export function createMockApi(
       return customer;
     },
 
+    async updateCustomer({ id, ...patch }) {
+      await wait(0.6);
+      const current = getDb().customers.find((entry) => entry.id === id);
+      if (!current) {
+        throw new ApiError(
+          "That customer record was not found.",
+          "It may have been merged. Search by mobile number.",
+        );
+      }
+      if (patch.name != null && !patch.name.trim()) {
+        throw new ApiError("A customer needs a name.", "Enter the name on the ID or receipt.");
+      }
+      const customer: Customer = { ...current, ...patch };
+      dispatch({ type: "upsertCustomer", customer });
+      return customer;
+    },
+
     async getItems(query = {}) {
       await wait();
       const db = getDb();
@@ -300,6 +408,175 @@ export function createMockApi(
       return [...getDb().suppliers].sort((a, b) => a.name.localeCompare(b.name));
     },
 
+    async receiveStock(input) {
+      await wait(0.8);
+      const db = getDb();
+      const item = db.items.find((entry) => entry.id === input.itemId);
+      if (!item) {
+        throw new ApiError("That item was not found.", "It may have been deactivated.");
+      }
+
+      const now = new Date();
+      const movements: StockMovement[] = [];
+      let next: InventoryItem;
+
+      if (item.itemClass === "handset") {
+        const rows = input.units ?? [];
+        if (!rows.length) {
+          throw new ApiError(
+            "No units to receive.",
+            "Handsets are tracked one by one — add at least one IMEI.",
+          );
+        }
+        const existing = new Set((item.units ?? []).map((unit) => unit.imei));
+        rows.forEach((row) => {
+          if (existing.has(row.imei)) {
+            throw new ApiError(
+              `IMEI ${row.imei} is already in stock.`,
+              "Every handset unit needs its own IMEI.",
+            );
+          }
+          existing.add(row.imei);
+        });
+
+        const units: HandsetUnit[] = rows.map((row) => ({
+          id: nextId("unit"),
+          itemId: item.id,
+          imei: row.imei,
+          condition: row.condition,
+          status: "in_stock",
+          cost: money(row.cost),
+          price: money(row.price),
+          storage: row.storage,
+          color: row.color,
+          warrantyDays: row.warrantyDays,
+          supplierId: input.supplierId ?? item.supplierId,
+          receivedAt: now.toISOString(),
+        }));
+
+        units.forEach((unit) => {
+          movements.push({
+            id: nextId("mv"),
+            itemId: item.id,
+            unitId: unit.id,
+            quantity: 1,
+            reason: "receiving",
+            reference: input.reference,
+            unitCost: unit.cost,
+            note: input.note,
+            at: now.toISOString(),
+            by: input.userId,
+          });
+        });
+
+        next = {
+          ...item,
+          units: [...(item.units ?? []), ...units],
+          supplierId: input.supplierId ?? item.supplierId,
+          lastMovementAt: now.toISOString(),
+        };
+      } else {
+        const quantity = input.quantity ?? 0;
+        if (quantity <= 0) {
+          throw new ApiError("Nothing to receive.", "Enter a quantity greater than zero.");
+        }
+        movements.push({
+          id: nextId("mv"),
+          itemId: item.id,
+          quantity,
+          reason: "receiving",
+          reference: input.reference,
+          unitCost: input.unitCost ?? item.unitCost,
+          note: input.note,
+          at: now.toISOString(),
+          by: input.userId,
+        });
+        next = {
+          ...item,
+          quantityOnHand: item.quantityOnHand + quantity,
+          unitCost: input.unitCost != null ? money(input.unitCost) : item.unitCost,
+          supplierId: input.supplierId ?? item.supplierId,
+          lastMovementAt: now.toISOString(),
+        };
+      }
+
+      dispatch({ type: "upsertItem", item: next });
+      dispatch({ type: "appendMovements", movements });
+      return next;
+    },
+
+    async adjustStock(input) {
+      await wait(0.7);
+      const db = getDb();
+      const item = db.items.find((entry) => entry.id === input.itemId);
+      if (!item) {
+        throw new ApiError("That item was not found.", "It may have been deactivated.");
+      }
+      if (!input.note?.trim()) {
+        throw new ApiError(
+          "An adjustment needs a reason in writing.",
+          "Say what happened — a count correction without a note cannot be audited.",
+        );
+      }
+
+      const now = new Date();
+      let next: InventoryItem;
+      let quantity: number;
+      let unitId: ID | undefined;
+
+      if (item.itemClass === "handset") {
+        const unit = (item.units ?? []).find((entry) => entry.id === input.unitId);
+        if (!unit) {
+          throw new ApiError("Pick a unit to adjust.", "Handsets are adjusted one IMEI at a time.");
+        }
+        const status = input.unitStatus ?? "returned";
+        next = {
+          ...item,
+          units: (item.units ?? []).map((entry) =>
+            entry.id === unit.id ? { ...entry, status } : entry,
+          ),
+          lastMovementAt: now.toISOString(),
+        };
+        quantity = status === "in_stock" ? 1 : -1;
+        unitId = unit.id;
+      } else {
+        quantity = input.quantity ?? 0;
+        if (quantity === 0) {
+          throw new ApiError("Nothing to adjust.", "Enter a non-zero quantity.");
+        }
+        const onHand = item.quantityOnHand + quantity;
+        if (onHand < 0) {
+          throw new ApiError(
+            `Only ${item.quantityOnHand} on hand.`,
+            "An adjustment cannot take stock below zero.",
+          );
+        }
+        next = {
+          ...item,
+          quantityOnHand: onHand,
+          lastMovementAt: now.toISOString(),
+        };
+      }
+
+      dispatch({ type: "upsertItem", item: next });
+      dispatch({
+        type: "appendMovements",
+        movements: [
+          {
+            id: nextId("mv"),
+            itemId: item.id,
+            unitId,
+            quantity,
+            reason: input.reason,
+            note: input.note.trim(),
+            at: now.toISOString(),
+            by: input.userId,
+          },
+        ],
+      });
+      return next;
+    },
+
     async getSales(query = {}) {
       await wait();
       return getDb()
@@ -325,6 +602,175 @@ export function createMockApi(
       if (!sale) {
         throw new ApiError("That sale was not found.", "Search by sale number in Reports.");
       }
+      return sale;
+    },
+
+    async createSale(input) {
+      await wait(0.9);
+      const db = getDb();
+      const now = new Date();
+
+      if (!input.lines.length) {
+        throw new ApiError("The cart is empty.", "Scan or add an item before charging.");
+      }
+
+      const shift = db.shifts.find((entry) => entry.status === "open");
+      if (!shift) {
+        throw new ApiError(
+          "No shift is open.",
+          "Open the cash drawer for today before ringing up a sale.",
+        );
+      }
+
+      /* Stock check first: nothing is written until the whole cart clears. */
+      input.lines.forEach((line) => {
+        if (!line.itemId) return;
+        const item = db.items.find((entry) => entry.id === line.itemId);
+        if (!item) {
+          throw new ApiError(`${line.name} is no longer in the catalog.`, "Remove it and try again.");
+        }
+        if (line.kind === "handset") {
+          const unit = item.units?.find((entry) => entry.id === line.unitId);
+          if (!unit || unit.status !== "in_stock") {
+            throw new ApiError(
+              `${line.name} is no longer available.`,
+              "That handset was sold or reserved. Pick another unit.",
+            );
+          }
+        } else if (itemStock(db, item.id) < line.quantity) {
+          throw new ApiError(
+            `Only ${itemStock(db, item.id)} left of ${item.name}.`,
+            "Lower the quantity or receive more stock first.",
+          );
+        }
+      });
+
+      const id = nextId("sal");
+      const lines: SaleLine[] = input.lines.map((line, index) => ({
+        id: `${id}-ln-${index + 1}`,
+        kind: line.kind,
+        itemId: line.itemId,
+        unitId: line.unitId,
+        sku: line.sku,
+        name: line.name,
+        quantity: line.quantity,
+        unitPrice: money(line.unitPrice),
+        unitCost: money(line.unitCost),
+        discount: line.discount,
+        lineTotal: money(
+          line.unitPrice * line.quantity -
+            (line.discount
+              ? line.discount.kind === "percent"
+                ? line.unitPrice * line.quantity * (line.discount.value / 100)
+                : line.discount.value
+              : 0),
+        ),
+      }));
+
+      const subtotal = money(lines.reduce((sum, line) => sum + line.lineTotal, 0));
+      const tax = computeTax({
+        subtotal,
+        orderDiscount: input.orderDiscount,
+        seniorPwd: { applies: Boolean(input.seniorPwd) },
+        vatRegistered: db.shop.vatRegistered,
+        vatRate: db.shop.vatRate,
+      });
+
+      const paid = money(input.payments.reduce((sum, payment) => sum + payment.amount, 0));
+      if (paid + 0.01 < tax.totalDue) {
+        throw new ApiError(
+          `Short by ₱${money(tax.totalDue - paid).toLocaleString("en-PH")}.`,
+          "Add a payment line to cover the balance.",
+        );
+      }
+
+      const payments: SalePayment[] = input.payments.map((payment, index) => ({
+        id: `${id}-pm-${index + 1}`,
+        method: payment.method,
+        amount: money(payment.amount),
+        reference: payment.reference,
+        tendered: payment.tendered != null ? money(payment.tendered) : undefined,
+        change:
+          payment.method === "cash" && payment.tendered != null
+            ? money(Math.max(0, payment.tendered - payment.amount))
+            : undefined,
+      }));
+
+      const sale: Sale = {
+        id,
+        saleNo: nextSequence("SI", db.sales.map((entry) => entry.saleNo), now),
+        officialReceiptNo: input.officialReceiptNo,
+        customerId: input.customerId,
+        lines,
+        subtotal,
+        orderDiscount: input.orderDiscount,
+        seniorPwdDiscount: input.seniorPwd
+          ? {
+              idNumber: input.seniorPwd.idNumber,
+              type: input.seniorPwd.type,
+              name: input.seniorPwd.name,
+              beneficiaries: input.seniorPwd.beneficiaries,
+              vatExemptSales: tax.vatExemptSales,
+              discountAmount: tax.seniorPwdDiscount,
+            }
+          : undefined,
+        vatableSales: tax.vatableSales,
+        vatExemptSales: tax.vatExemptSales,
+        vatAmount: tax.vatAmount,
+        zeroRatedSales: tax.zeroRatedSales,
+        totalDue: tax.totalDue,
+        payments,
+        status: "completed",
+        cashierId: input.cashierId,
+        shiftId: shift.id,
+        soldAt: now.toISOString(),
+        note: input.note,
+      };
+
+      /* Draw down stock: handsets by unit, everything else by quantity. */
+      const movements: StockMovement[] = [];
+      lines.forEach((line) => {
+        if (!line.itemId) return;
+        const item = db.items.find((entry) => entry.id === line.itemId);
+        if (!item) return;
+
+        if (line.kind === "handset" && line.unitId) {
+          const units = (item.units ?? []).map((unit): HandsetUnit =>
+            unit.id === line.unitId
+              ? { ...unit, status: "sold", soldAt: now.toISOString(), saleId: id }
+              : unit,
+          );
+          dispatch({
+            type: "upsertItem",
+            item: { ...item, units, lastMovementAt: now.toISOString() },
+          });
+        } else {
+          dispatch({
+            type: "upsertItem",
+            item: {
+              ...item,
+              quantityOnHand: item.quantityOnHand - line.quantity,
+              lastMovementAt: now.toISOString(),
+            },
+          });
+        }
+
+        movements.push({
+          id: nextId("mv"),
+          itemId: line.itemId,
+          unitId: line.unitId,
+          quantity: -line.quantity,
+          reason: "sale",
+          reference: sale.saleNo,
+          saleId: id,
+          unitCost: line.unitCost,
+          at: now.toISOString(),
+          by: input.cashierId,
+        });
+      });
+
+      dispatch({ type: "upsertSale", sale });
+      if (movements.length) dispatch({ type: "appendMovements", movements });
       return sale;
     },
 
@@ -632,6 +1078,98 @@ export function createMockApi(
 
       dispatch({ type: "appendEvents", events });
       return updated;
+    },
+
+    async releaseTicket({ ticketId, releasedTo, payment, actorId }) {
+      await wait(0.9);
+      const db = getDb();
+      const current = requireTicket(ticketId);
+      if (current.status === "released") {
+        throw new ApiError(
+          "This ticket is already released.",
+          "Released tickets are locked. File a warranty claim to open a new job.",
+        );
+      }
+      if (!releasedTo.trim()) {
+        throw new ApiError(
+          "Who is claiming this unit?",
+          "Enter the claimant's name before releasing.",
+        );
+      }
+
+      const now = new Date();
+      const paidNow = payment ? money(payment.amount) : 0;
+      const balance = money(current.balance - paidNow);
+      if (balance > 0.01) {
+        throw new ApiError(
+          `A balance of ₱${balance.toLocaleString("en-PH")} remains.`,
+          "Collect the full balance before releasing the unit.",
+        );
+      }
+
+      const payments: Payment[] = [...current.payments];
+      if (paidNow > 0 && payment) {
+        payments.push({
+          id: nextId("pay"),
+          amount: paidNow,
+          method: payment.method,
+          reference: payment.reference,
+          kind: "balance",
+          receivedAt: now.toISOString(),
+          receivedBy: actorId,
+          shiftId: db.shifts.find((shift) => shift.status === "open")?.id,
+        });
+      }
+
+      const template =
+        db.warrantyTemplates.find((entry) => entry.periodDays === current.warrantyDays) ??
+        db.warrantyTemplates.find((entry) => entry.isDefault);
+      const warrantyDays = current.warrantyDays;
+      const warranty =
+        warrantyDays > 0
+          ? {
+              claimCode: current.claimCode,
+              scope: template?.scope ?? "The specific fault repaired on this job order.",
+              periodDays: warrantyDays,
+              startsAt: now.toISOString(),
+              expiresAt: new Date(now.getTime() + warrantyDays * 86_400_000).toISOString(),
+              exclusions: template?.exclusions ?? [],
+            }
+          : undefined;
+
+      const ticket: Ticket = {
+        ...current,
+        status: "released",
+        amountPaid: money(current.amountPaid + paidNow),
+        balance: 0,
+        payments,
+        warranty,
+        releasedAt: now.toISOString(),
+        releasedBy: actorId,
+        releasedTo: releasedTo.trim(),
+        statusChangedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+
+      const events: TimelineEvent[] = [];
+      if (paidNow > 0) {
+        events.push(
+          event(
+            ticketId,
+            "payment",
+            `Balance of ₱${paidNow.toLocaleString("en-PH")} received (${payment?.method}).`,
+            actorId,
+            { amount: paidNow },
+          ),
+        );
+      }
+      events.push(
+        event(ticketId, "released", `Released to ${ticket.releasedTo}.`, actorId),
+      );
+
+      dispatch({ type: "upsertTicket", ticket });
+      dispatch({ type: "appendEvents", events });
+      return ticket;
     },
 
     async getDashboard() {
