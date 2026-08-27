@@ -59,10 +59,17 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
  * nav counts, the day sheet wants the same summary, the board wants the same
  * tickets — and React's dev Strict Mode runs every effect twice on top of
  * that. Without this, one page load walked the ticket table four times over.
- * It is deliberately short: long enough to collapse a single paint, too short
- * to ever show stale data after someone acts.
+ *
+ * Staleness is bounded by `invalidate()`, not by this number: every write
+ * clears the whole cache, so anything the operator does is reflected at once.
+ * The window only governs how long a *read* may lag a change made somewhere
+ * else — another device, or the server on its own. For a single-counter shop
+ * that is a rare case, so this is sized to survive a screen-to-screen
+ * navigation rather than a single paint. Under ~2s, moving between the day
+ * sheet, the board, and inventory re-walked the entire paginated catalog
+ * (products + stock levels + serialized units) on every hop.
  */
-const GET_CACHE_MS = 1500;
+const GET_CACHE_MS = 30_000;
 
 interface CacheEntry {
   at: number;

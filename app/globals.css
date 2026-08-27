@@ -357,6 +357,11 @@
   }
 }
 
+/* Printed documents are hidden on screen and revealed only to the printer. */
+.print-only {
+  display: none;
+}
+
 @media print {
   /* Paper is always the light token set, whatever the screen is doing. */
   .dark {
@@ -365,5 +370,40 @@
 
   .no-print {
     display: none !important;
+  }
+
+  /* A claim stub is its own document, not a screenshot of the app behind it.
+     When one is mounted it takes over the sheet: the whole UI is hidden, the
+     stub is lifted out of the dialog's stacking context, and the page starts
+     at the top-left of the paper. Without this, printing a receipt spooled
+     the entire scrolled page with the dialog stamped over it. */
+  body:has(.print-only) > *:not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root {
+    display: block !important;
+    position: static !important;
+  }
+
+  .print-only {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+  }
+
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 }

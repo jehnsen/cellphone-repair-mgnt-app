@@ -22,8 +22,11 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomerPicker, type NewCustomerDraft } from "@/components/intake/customer-picker";
 import { TagHead } from "@/components/tag/tag-head";
+import { PrintDocument } from "@/components/print/print-document";
+import { ClaimStub } from "@/components/print/claim-stub";
 import { useQuery, useShop } from "@/lib/shop/store";
-import { formatDate, peso } from "@/lib/format";
+import { formatDate, isValidImei, peso } from "@/lib/format";
+import { ApiError } from "@/lib/api/errors";
 import { agingOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { PROBLEM_LABEL, PROBLEM_TAGS } from "@/lib/problems";
@@ -125,8 +128,22 @@ export default function IntakePage() {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   };
 
+  /* Mirror the API's rule: exactly 15 digits is an IMEI and must satisfy the
+     Luhn check digit; anything else is stored as a serial. Catching this here
+     turns a rejected submission into a caught typo. */
+  const imeiDigits = imei.replace(/\D/g, "");
+  const looksLikeImei = imeiDigits.length === 15 && imei.trim() === imeiDigits;
+  const imeiProblem =
+    !imei.trim()
+      ? null
+      : looksLikeImei && !isValidImei(imeiDigits)
+        ? "That is 15 digits but the check digit is wrong — re-read the IMEI."
+        : /^\d+$/.test(imei.trim()) && imei.trim().length !== 15
+          ? `An all-digit identifier must be a 15-digit IMEI (this is ${imei.trim().length}).`
+          : null;
+
   const hasCustomer = customer || (draft.name.trim() && draft.mobile.trim());
-  const hasDevice = brand.trim() && model.trim() && imei.trim().length === 15;
+  const hasDevice = brand.trim() && model.trim() && imei.trim().length > 0 && !imeiProblem;
   const hasProblem = reportedProblem.trim().length > 0;
   const canSubmit = Boolean(hasCustomer && hasDevice && hasProblem && estimatedCost && !submitting);
 
@@ -185,7 +202,18 @@ export default function IntakePage() {
       setCreated(ticket);
       toast.success(`Job order ${ticket.ticketNo} created.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not create the job order.");
+      /* A 422 names the field it rejected; show that rather than the generic
+         "The given data was invalid", which tells the counter nothing. */
+      if (error instanceof ApiError) {
+        const fields = error.fieldSummary;
+        toast.error(fields || error.message, {
+          description: fields ? error.hint : undefined,
+        });
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "Could not create the job order.",
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -256,12 +284,24 @@ export default function IntakePage() {
                   <Label htmlFor="imei">IMEI / serial</Label>
                   <InputMono
                     id="imei"
-                    inputMode="numeric"
                     value={imei}
-                    onChange={(e) => setImei(e.target.value.replace(/\D/g, "").slice(0, 15))}
-                    placeholder="15-digit IMEI"
-                    aria-invalid={imei.length > 0 && imei.length !== 15}
+                    onChange={(e) => setImei(e.target.value.trimStart().slice(0, 32))}
+                    placeholder="15-digit IMEI, or a serial"
+                    aria-invalid={Boolean(imeiProblem)}
+                    aria-describedby="imei-hint"
                   />
+                  <p
+                    id="imei-hint"
+                    className={cn(
+                      "text-xs leading-relaxed",
+                      imeiProblem ? "text-stamp-ink" : "text-ink-faint",
+                    )}
+                  >
+                    {imeiProblem ??
+                      (looksLikeImei
+                        ? "Checks out."
+                        : "Phones: dial *#06# on the unit. Laptops and watches: use the serial.")}
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Brand</Label>
@@ -510,7 +550,8 @@ export default function IntakePage() {
               </Button>
               {!hasCustomer || !hasDevice || !hasProblem || !estimatedCost ? (
                 <p className="text-center text-xs text-ink-faint">
-                  Customer, device with a 15-digit IMEI, reported problem, and an estimate are required.
+                  Customer, device with an IMEI or serial, reported problem, and an
+                  estimate are required.
                 </p>
               ) : null}
             </PanelBody>
@@ -547,6 +588,14 @@ export default function IntakePage() {
                 { label: "Balance", value: peso(created.balance) },
               ]}
             />
+          ) : null}
+
+          {/* Mounted only while the dialog is open, so `window.print()` has a
+              document to print instead of the page behind it. */}
+          {created ? (
+            <PrintDocument>
+              <ClaimStub ticket={created} customer={createdCustomer} shop={db.shop} />
+            </PrintDocument>
           ) : null}
 
           <div className="flex flex-wrap gap-2 pt-1">

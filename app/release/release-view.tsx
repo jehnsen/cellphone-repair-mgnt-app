@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TagHead } from "@/components/tag/tag-head";
+import { PrintDocument } from "@/components/print/print-document";
+import { ReleaseSlip } from "@/components/print/release-slip";
 import { StatusChip } from "@/components/tag/status-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { agingOf, STATUS_META } from "@/lib/status";
@@ -468,6 +470,14 @@ export function ReleaseView() {
               ) : (
                 <p className="text-xs text-ink-faint">No warranty on this release.</p>
               )}
+
+              <PrintDocument>
+                <ReleaseSlip
+                  ticket={released}
+                  customer={db.customers.find((c) => c.id === released.customerId)}
+                  shop={db.shop}
+                />
+              </PrintDocument>
 
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => window.print()}>

@@ -49,16 +49,35 @@ export class ApiError extends Error {
     this.details = options.details ?? [];
   }
 
-  /** Field-keyed messages, for wiring a 422 back onto a form. */
+  /**
+   * Field-keyed messages, for wiring a 422 back onto a form.
+   *
+   * Laravel sends `{ field, messages: [...] }` — plural, because one field can
+   * fail several rules at once. A singular `message` is accepted too so this
+   * keeps working if the envelope is ever flattened.
+   */
   get fieldErrors(): Record<string, string> {
     const out: Record<string, string> = {};
     for (const detail of this.details) {
       const field = typeof detail.field === "string" ? detail.field : undefined;
-      const message =
-        typeof detail.message === "string" ? detail.message : undefined;
-      if (field && message) out[field] = message;
+      if (!field) continue;
+
+      const message = Array.isArray(detail.messages)
+        ? detail.messages.filter((m): m is string => typeof m === "string").join(" ")
+        : typeof detail.message === "string"
+          ? detail.message
+          : undefined;
+
+      if (message) out[field] = message;
     }
     return out;
+  }
+
+  /** "imei: The imei must be valid." — for a toast, when there is no field to pin it to. */
+  get fieldSummary(): string {
+    return Object.entries(this.fieldErrors)
+      .map(([field, message]) => `${field.replace(/_/g, " ")}: ${message}`)
+      .join("\n");
   }
 }
 

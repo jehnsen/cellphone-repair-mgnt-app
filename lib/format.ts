@@ -133,9 +133,39 @@ export function formatImei(imei: string): string {
   return `${clean.slice(0, 2)} ${clean.slice(2, 8)} ${clean.slice(8, 14)} ${clean.slice(14)}`;
 }
 
-/** 09171234567 → 0917 123 4567 */
+/**
+ * A real IMEI's 15th digit is a Luhn check over the first 14, so a typo in
+ * any digit is catchable before the unit leaves the counter. The API enforces
+ * this and rejects the whole job order, so check it here first — a mistyped
+ * digit should be caught while the customer is still standing there, not
+ * after the form is filled in.
+ */
+export function isValidImei(imei: string): boolean {
+  const clean = imei.replace(/\D/g, "");
+  if (clean.length !== 15) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 14; i += 1) {
+    let digit = Number(clean[13 - i]);
+    if (i % 2 === 0) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return (10 - (sum % 10)) % 10 === Number(clean[14]);
+}
+
+/**
+ * 09171234567 → 0917 123 4567
+ *
+ * The API stores some numbers in international form (+639171234567), so that
+ * is normalised to the local 0-prefixed grouping staff actually read out
+ * rather than being passed through raw.
+ */
 export function formatMobile(mobile: string): string {
-  const clean = mobile.replace(/\D/g, "");
+  let clean = mobile.replace(/\D/g, "");
+  if (clean.length === 12 && clean.startsWith("63")) clean = `0${clean.slice(2)}`;
   if (clean.length !== 11) return mobile;
   return `${clean.slice(0, 4)} ${clean.slice(4, 7)} ${clean.slice(7)}`;
 }
