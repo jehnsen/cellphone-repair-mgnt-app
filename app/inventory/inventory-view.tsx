@@ -39,14 +39,14 @@ import {
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
-import { useMutation, useQuery, useShop } from "@/lib/mock/store";
-import { isLowStock, itemStock } from "@/lib/mock/db";
+import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { isLowStock, itemStock } from "@/lib/shop/queries";
 import { formatDate, formatImei, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
   AdjustStockInput,
   ReceiveStockInput,
-} from "@/lib/mock/api";
+} from "@/lib/shop/contract";
 import type { HandsetCondition, InventoryItem, ItemClass } from "@/lib/types";
 
 const CLASS_LABEL: Record<ItemClass, string> = {

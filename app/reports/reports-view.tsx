@@ -25,8 +25,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/states";
-import { useShop } from "@/lib/mock/store";
-import { itemStock } from "@/lib/mock/db";
+import { useShop } from "@/lib/shop/store";
+import { itemStock } from "@/lib/shop/queries";
 import { STATUS_META } from "@/lib/status";
 import { count, formatDate, manilaDayKey, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";

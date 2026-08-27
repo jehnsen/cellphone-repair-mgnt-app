@@ -22,11 +22,11 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomerPicker, type NewCustomerDraft } from "@/components/intake/customer-picker";
 import { TagHead } from "@/components/tag/tag-head";
-import { useShop } from "@/lib/mock/store";
+import { useQuery, useShop } from "@/lib/shop/store";
 import { formatDate, peso } from "@/lib/format";
 import { agingOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
-import { MODELS, PROBLEM_LABEL, PROBLEM_TAGS } from "@/lib/mock/catalog";
+import { PROBLEM_LABEL, PROBLEM_TAGS } from "@/lib/problems";
 import type {
   Customer,
   ConditionCheck,
@@ -109,13 +109,16 @@ export default function IntakePage() {
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Ticket | null>(null);
 
-  const brandModels = useMemo(
-    () => Array.from(new Set(MODELS.filter((m) => m.type === deviceType).map((m) => m.brand))).sort(),
-    [deviceType],
-  );
+  /* Brands and models come from the shop's own catalog. A device the shop has
+     never seen is still accepted: intake creates the brand and model on save. */
+  const { data: catalog } = useQuery((api) => api.getDeviceCatalog());
+  const brandModels = useMemo(() => catalog?.brands ?? [], [catalog]);
   const modelsForBrand = useMemo(
-    () => MODELS.filter((m) => m.type === deviceType && m.brand === brand),
-    [deviceType, brand],
+    () =>
+      (catalog?.models ?? [])
+        .filter((entry) => entry.brand === brand)
+        .map((entry) => entry.model),
+    [catalog, brand],
   );
 
   const toggle = <T,>(list: T[], value: T, set: (next: T[]) => void) => {
@@ -283,8 +286,8 @@ export default function IntakePage() {
                     </SelectTrigger>
                     <SelectContent>
                       {modelsForBrand.map((m) => (
-                        <SelectItem key={m.model} value={m.model}>
-                          {m.model}
+                        <SelectItem key={m} value={m}>
+                          {m}
                         </SelectItem>
                       ))}
                     </SelectContent>

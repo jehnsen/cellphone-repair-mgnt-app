@@ -22,12 +22,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/states";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMutation, useQuery, useShop } from "@/lib/mock/store";
-import { itemStock } from "@/lib/mock/db";
+import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { itemStock } from "@/lib/shop/queries";
 import { computeTax } from "@/lib/vat";
 import { peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { NewSaleInput } from "@/lib/mock/api";
+import type { NewSaleInput } from "@/lib/shop/contract";
 import type { InventoryItem, PaymentMethod, Sale, SaleLineKind } from "@/lib/types";
 
 interface CartLine {

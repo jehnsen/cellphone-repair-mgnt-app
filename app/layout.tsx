@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ShopProvider } from "@/lib/mock/store";
+import { ShopProvider } from "@/lib/shop/store";
 import { AppShell } from "@/components/shell/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,7 +32,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Job Order — repair shop management",
+  title: "Nelson Cellphone & Computer Repair Shop",
   description:
     "Repair intake, board, release, inventory, and point of sale for a single-branch phone repair shop.",
 };

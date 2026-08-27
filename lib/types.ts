@@ -115,6 +115,7 @@ export type TicketStatus =
   | "ready_for_pickup"
   | "released"
   | "unrepairable"
+  | "returned_as_is"
   | "unclaimed";
 
 export type ProblemTag =

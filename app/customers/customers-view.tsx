@@ -30,7 +30,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/states";
 import { StatusChip } from "@/components/tag/status-chip";
-import { useMutation, useShop } from "@/lib/mock/store";
+import { useMutation, useShop } from "@/lib/shop/store";
 import { STATUS_META } from "@/lib/status";
 import { formatDate, formatImei, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV } from "@/components/shell/nav";
-import { useShop } from "@/lib/mock/store";
+import { useShop } from "@/lib/shop/store";
 import type { NavCounts } from "@/components/shell/nav-rail";
 
 /**

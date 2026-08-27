@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AgingStrip } from "@/components/tag/aging-strip";
 import { PageHeader } from "@/components/shell/page-header";
+import { DataSourceNotice } from "@/components/shell/data-source-notice";
 import {
   Panel,
   PanelBody,
@@ -29,14 +30,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { StatusChip } from "@/components/tag/status-chip";
-import { useQuery, useShop } from "@/lib/mock/store";
+import { useQuery, useShop } from "@/lib/shop/store";
 import { agingOf, BOARD_STATUSES, STATUS_META } from "@/lib/status";
 import { count, dueLabel, formatTime, peso, shortAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Ticket } from "@/lib/types";
 
 export function DaySheetView() {
-  const { db, user, failureRate, setFailureRate, reseed } = useShop();
+  const { db, user } = useShop();
   const {
     data: summary,
     loading,
@@ -430,43 +431,8 @@ export function DaySheetView() {
         </div>
       </div>
 
-      {/* Prototype controls, deliberately last and visually quiet. */}
-      <Panel className="border-dashed">
-        <PanelHeader>
-          <PanelTitle className="text-ink-faint">Prototype controls</PanelTitle>
-        </PanelHeader>
-        <PanelBody className="flex flex-wrap items-end gap-4">
-          <div>
-            <p className="label-pad">Simulated failure rate</p>
-            <div className="mt-1.5 flex gap-1">
-              {[0, 0.25, 1].map((rate) => (
-                <button
-                  key={rate}
-                  type="button"
-                  onClick={() => setFailureRate(rate)}
-                  aria-pressed={failureRate === rate}
-                  className={cn(
-                    "mono tap rounded-md border px-3 text-xs transition-colors",
-                    failureRate === rate
-                      ? "border-bench bg-bench-fill font-semibold text-bench-ink"
-                      : "border-rule bg-paper text-ink-soft hover:bg-secondary",
-                  )}
-                >
-                  {rate === 0 ? "off" : `${rate * 100}%`}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={reseed}>
-            <RefreshCw aria-hidden /> Rebuild seed data
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="ml-auto">
-            <Link href="/specimen">
-              Design specimen <ArrowRight aria-hidden />
-            </Link>
-          </Button>
-        </PanelBody>
-      </Panel>
+      {/* Where these numbers come from, and what is not wired up yet. */}
+      <DataSourceNotice />
     </div>
   );
 }

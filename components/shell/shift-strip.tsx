@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { LogOut, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useShop } from "@/lib/mock/store";
+import { useShop } from "@/lib/shop/store";
 import { cn } from "@/lib/utils";
 
 interface ShiftStripProps {

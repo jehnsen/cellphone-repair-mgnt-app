@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV, type NavItem } from "@/components/shell/nav";
-import { useShop } from "@/lib/mock/store";
+import { useShop } from "@/lib/shop/store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface NavCounts {

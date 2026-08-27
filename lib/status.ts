@@ -137,12 +137,23 @@ export const STATUS_META: Record<TicketStatus, StatusMeta> = {
     dwellLimitHours: 72,
     primaryAction: { label: "Return as-is", next: "released" },
   },
+  returned_as_is: {
+    status: "returned_as_is",
+    code: "RA",
+    label: "Returned as-is",
+    pastTense: "returned the unit unrepaired",
+    order: 10,
+    onBoard: false,
+    terminal: true,
+    fill: "outline",
+    dwellLimitHours: Number.POSITIVE_INFINITY,
+  },
   unclaimed: {
     status: "unclaimed",
     code: "UN",
     label: "Unclaimed",
     pastTense: "flagged the unit unclaimed",
-    order: 10,
+    order: 11,
     onBoard: false,
     terminal: true,
     fill: "outline",
@@ -230,9 +241,9 @@ export function nextStatuses(status: TicketStatus): TicketStatus[] {
     case "received":
       return ["diagnosed", "unrepairable"];
     case "diagnosed":
-      return ["awaiting_approval", "awaiting_parts", "in_repair", "unrepairable"];
+      return ["awaiting_approval", "in_repair", "unrepairable"];
     case "awaiting_approval":
-      return ["in_repair", "awaiting_parts", "unrepairable", "ready_for_pickup"];
+      return ["in_repair", "awaiting_parts", "returned_as_is"];
     case "awaiting_parts":
       return ["in_repair", "unrepairable"];
     case "in_repair":
@@ -241,8 +252,10 @@ export function nextStatuses(status: TicketStatus): TicketStatus[] {
       return ["ready_for_pickup", "in_repair"];
     case "ready_for_pickup":
       return ["released", "unclaimed"];
-    case "unrepairable":
+    case "unclaimed":
       return ["released"];
+    case "unrepairable":
+      return ["returned_as_is"];
     default:
       return [];
   }

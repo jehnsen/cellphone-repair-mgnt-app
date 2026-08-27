@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useQuery } from "@/lib/mock/store";
+import { useQuery } from "@/lib/shop/store";
 import { formatMobile } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Customer } from "@/lib/types";

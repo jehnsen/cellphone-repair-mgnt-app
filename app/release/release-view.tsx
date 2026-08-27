@@ -22,7 +22,7 @@ import { EmptyState, ErrorState } from "@/components/ui/states";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TagHead } from "@/components/tag/tag-head";
 import { StatusChip } from "@/components/tag/status-chip";
-import { useMutation, useQuery, useShop } from "@/lib/mock/store";
+import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { agingOf, STATUS_META } from "@/lib/status";
 import { formatDate, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";

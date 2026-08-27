@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { NavRail } from "@/components/shell/nav-rail";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { ShiftStrip } from "@/components/shell/shift-strip";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { useQuery, useShop } from "@/lib/mock/store";
+import { useQuery, useShop } from "@/lib/shop/store";
 import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "jo.railCollapsed";
@@ -15,8 +15,9 @@ const COLLAPSE_KEY = "jo.railCollapsed";
 const BARE_ROUTES = ["/login"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { ready } = useShop();
+  const { ready, auth, authError, apiBaseUrl, retry } = useShop();
   const pathname = usePathname();
+  const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const { data: summary } = useQuery((api) => api.getDashboard());
@@ -24,6 +25,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
   }, []);
+
+  /* No token means there is nothing to show, so go and get one. */
+  useEffect(() => {
+    if (auth === "signed-out" && !BARE_ROUTES.includes(pathname)) {
+      router.replace("/login");
+    }
+  }, [auth, pathname, router]);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((value) => {
@@ -41,6 +49,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   /* Login owns its viewport and its own loading copy. */
   if (BARE_ROUTES.includes(pathname)) {
     return <>{children}</>;
+  }
+
+  if (auth === "unreachable") {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-paper p-6">
+        <div className="w-full max-w-md rounded-lg border border-rule bg-copy p-5 shadow-panel">
+          <p className="label-pad">Job order</p>
+          <p className="mt-2 text-sm font-semibold text-ink">
+            {authError?.message ?? "The shop server did not answer."}
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            {authError?.hint ?? `No answer from ${apiBaseUrl}.`}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={retry}
+              className="tap rounded-md bg-bench px-3 text-sm font-medium text-white"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => router.replace("/login")}
+              className="tap rounded-md border border-rule bg-copy px-3 text-sm font-medium text-ink"
+            >
+              Sign in again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!ready) {

@@ -16,9 +16,9 @@ import type {
 } from "@/lib/types";
 
 /**
- * One reducer over the whole mock database. The API layer works out *what*
- * changed; this only decides where it lands. Keeping it this thin means a
- * real backend can drive the same actions from a websocket or a refetch.
+ * One reducer over the local cache of the shop. The API layer works out *what*
+ * changed; this only decides where it lands. Keeping it this thin means the
+ * server can drive the same actions from a refetch or, later, a socket.
  */
 
 export type ShopAction =
@@ -35,7 +35,15 @@ export type ShopAction =
   | { type: "upsertUser"; user: User }
   | { type: "upsertSupplier"; supplier: Supplier }
   | { type: "upsertService"; service: ServiceItem }
-  | { type: "patchShop"; patch: Partial<ShopProfile> };
+  | { type: "patchShop"; patch: Partial<ShopProfile> }
+  /* Bulk replacements, used by the live client to keep the local cache in
+     step with the server without firing one action per row. */
+  | { type: "setTickets"; tickets: Ticket[] }
+  | { type: "setCustomers"; customers: Customer[] }
+  | { type: "setUsers"; users: User[] }
+  | { type: "setItems"; items: InventoryItem[] }
+  /* No state change: used to bump the query version after a server write. */
+  | { type: "touch" };
 
 function upsert<T extends { id: string }>(rows: T[], row: T): T[] {
   const index = rows.findIndex((entry) => entry.id === row.id);
@@ -88,6 +96,14 @@ export function shopReducer(state: Database, action: ShopAction): Database {
       return { ...state, services: upsert(state.services, action.service) };
     case "patchShop":
       return { ...state, shop: { ...state.shop, ...action.patch } };
+    case "setTickets":
+      return { ...state, tickets: action.tickets };
+    case "setCustomers":
+      return { ...state, customers: action.customers };
+    case "setUsers":
+      return { ...state, users: action.users };
+    case "setItems":
+      return { ...state, items: action.items };
     default:
       return state;
   }

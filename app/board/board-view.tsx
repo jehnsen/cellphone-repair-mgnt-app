@@ -28,7 +28,7 @@ import {
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { AgingStrip } from "@/components/tag/aging-strip";
 import { StatusChip } from "@/components/tag/status-chip";
-import { useMutation, useQuery, useShop } from "@/lib/mock/store";
+import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { agingOf, BOARD_STATUSES, nextStatuses, STATUS_META } from "@/lib/status";
 import { dueLabel, shortAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
