@@ -190,6 +190,79 @@ export interface TimelineEvent {
   meta?: Record<string, string | number | boolean | null>;
 }
 
+/* ── Repair findings ────────────────────────────────────────────────── */
+
+/**
+ * What was actually wrong with the unit, and what was done about it.
+ *
+ * Deliberately a controlled vocabulary rather than free text: this is what
+ * makes "how often is it the charging port on this model?" answerable. See
+ * docs/backend-findings-spec.md — these values mirror the server enums, which
+ * are the source of truth.
+ */
+
+/** Why it failed. One per job. */
+export type RootCause =
+  | "drop_impact"
+  | "liquid_ingress"
+  | "component_wear"
+  | "power_surge"
+  | "third_party_repair"
+  | "firmware_corruption"
+  | "manufacturing_defect"
+  | "user_error"
+  | "no_fault_found"
+  | "other";
+
+/** Which components were faulty. Zero or more. */
+export type DefectArea =
+  | "screen"
+  | "digitizer"
+  | "battery"
+  | "charging_port"
+  | "motherboard"
+  | "power_ic"
+  | "camera_rear"
+  | "camera_front"
+  | "speaker"
+  | "earpiece"
+  | "microphone"
+  | "buttons"
+  | "back_cover"
+  | "housing"
+  | "sim_reader"
+  | "sd_reader"
+  | "wifi_antenna"
+  | "other";
+
+/** What was done. */
+export type Resolution =
+  | "repaired"
+  | "part_replaced"
+  | "cleaned"
+  | "software_restored"
+  | "no_fault_found"
+  | "unrepairable"
+  | "customer_declined";
+
+export interface RepairFinding {
+  /** One record per ticket, so this is stable across edits. */
+  id: ID;
+  summary: string;
+  details?: string;
+  rootCause: RootCause;
+  defects: DefectArea[];
+  resolution: Resolution;
+  technicianNotes?: string;
+  /** Null until the unit has been bench-tested after the work. */
+  qcPassed?: boolean;
+  qcCheckedAt?: ISODate;
+  qcCheckedBy?: ID;
+  recordedBy: ID;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
 export interface WarrantySlip {
   claimCode: string;
   scope: string;
@@ -230,8 +303,12 @@ export interface Ticket {
   technicianId?: ID;
 
   /* Work */
+  /** @deprecated Superseded by `finding`. Kept while the API still lacks the
+   *  findings endpoint; nothing writes these. */
   diagnosis?: string;
   rootCause?: string;
+  /** The structured conclusion. Absent until a technician records one. */
+  finding?: RepairFinding;
   partsUsed: PartConsumption[];
   quoteState: QuoteState;
   quoteSentAt?: ISODate;

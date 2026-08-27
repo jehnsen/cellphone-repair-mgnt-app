@@ -1,6 +1,7 @@
 import type {
   ConditionCheck,
   Customer,
+  DefectArea,
   DeviceInfo,
   Discount,
   HandsetCondition,
@@ -11,6 +12,9 @@ import type {
   Payment,
   PaymentMethod,
   ProblemTag,
+  RepairFinding,
+  Resolution,
+  RootCause,
   Sale,
   SaleLineKind,
   Shift,
@@ -143,6 +147,75 @@ export interface DashboardSummary {
   awaitingApproval: number;
 }
 
+export interface SaveFindingInput {
+  ticketId: ID;
+  summary: string;
+  details?: string;
+  rootCause: RootCause;
+  defects: DefectArea[];
+  resolution: Resolution;
+  technicianNotes?: string;
+  qcPassed?: boolean;
+  actorId: ID;
+}
+
+/**
+ * The server's own reporting, kept separate from `ShopApi`.
+ *
+ * These figures are computed in SQL over the whole shop, so they are the
+ * numbers of record — screens must not re-derive them from the browser cache.
+ * Implemented by `lib/api/live-reports.ts`.
+ */
+export interface ReportRange {
+  from?: string;
+  to?: string;
+  days?: number;
+}
+
+export interface ShopReports {
+  getSalesReport(range?: ReportRange): Promise<{
+    grossSales: number;
+    discountTotal: number;
+    vatTotal: number;
+    saleCount: number;
+    byDay: { date: string; saleCount: number; grossSales: number }[];
+  }>;
+
+  getMarginReport(range?: ReportRange): Promise<{
+    revenue: number;
+    cogs: number;
+    grossMargin: number;
+  }>;
+
+  getTechnicianThroughput(range?: ReportRange): Promise<
+    { technician: string; ticketCount: number; averageTurnaroundHours: number }[]
+  >;
+
+  getMostRepairedModels(range?: ReportRange): Promise<
+    { model: string; ticketCount: number }[]
+  >;
+
+  getInventoryValuation(): Promise<{
+    totalCostValue: number;
+    totalRetailValue: number;
+    skuCount: number;
+    rows: {
+      product: string;
+      onHand: number;
+      costValue: number;
+      retailValue: number;
+    }[];
+  }>;
+
+  getDeadStock(days?: number): Promise<
+    { product: string; onHand: number; daysChecked: number }[]
+  >;
+
+  getUnclaimedAging(): Promise<
+    { ticketId: string; ticketNo: string; daysUnclaimed: number }[]
+  >;
+}
+
 /** Everything a screen can ask of the shop. A fetch client implements this. */
 export interface ShopApi {
   getTickets(query?: TicketQuery): Promise<Ticket[]>;
@@ -197,6 +270,11 @@ export interface ShopApi {
     actorId: ID;
   }): Promise<Ticket[]>;
   addNote(input: { ticketId: ID; note: string; actorId: ID }): Promise<TimelineEvent>;
+
+  /** The structured conclusion. Absent until a technician records one. */
+  getFinding(ticketId: ID): Promise<RepairFinding | null>;
+  /** Upsert: creates on first save, updates thereafter. */
+  saveFinding(input: SaveFindingInput): Promise<RepairFinding>;
   markReadyForPickup(input: { ticketIds: ID[]; actorId: ID }): Promise<Ticket[]>;
   releaseTicket(input: {
     ticketId: ID;

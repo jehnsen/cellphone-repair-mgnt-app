@@ -25,6 +25,7 @@ import { PrintDocument } from "@/components/print/print-document";
 import { ReleaseSlip } from "@/components/print/release-slip";
 import { StatusChip } from "@/components/tag/status-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { toastError } from "@/lib/api/errors";
 import { agingOf, STATUS_META } from "@/lib/status";
 import { formatDate, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -150,7 +151,7 @@ export function ReleaseView() {
 
   const submitRelease = async () => {
     if (!ticket) return;
-    const result = await release.mutate({
+    const { data: result, error } = await release.mutate({
       ticketId: ticket.id,
       releasedTo: claimant.trim(),
       payment:
@@ -162,8 +163,9 @@ export function ReleaseView() {
     if (result) {
       setReleased(result);
       toast.success(`${result.ticketNo} released to ${result.releasedTo}.`);
-    } else if (release.error) {
-      toast.error(release.error.message);
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not release the ticket.");
+      toast.error(message, { description });
     }
   };
 

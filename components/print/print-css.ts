@@ -21,8 +21,8 @@ export const PRINT_CSS = `
 .stub .copy { padding-bottom: 1mm; }
 .stub .copy--second {
   border-top: 1pt dashed #8a8a8a;
-  margin-top: 5mm;
-  padding-top: 5mm;
+  margin-top: 4mm;
+  padding-top: 4mm;
 }
 
 /* ── Masthead ─────────────────────────────────────────────────────── */
@@ -177,7 +177,7 @@ export const PRINT_CSS = `
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12mm;
-  margin-top: 7mm;
+  margin-top: 5mm;
 }
 .stub .sign span {
   border-top: 0.75pt solid #000;
@@ -201,7 +201,7 @@ export const PRINT_CSS = `
      only thing capped. */
   .stub .problem {
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }

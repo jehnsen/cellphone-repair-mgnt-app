@@ -18,6 +18,7 @@ import type {
   TicketQuoteDto,
   TokenDto,
   UserDto,
+  RepairFindingDto,
 } from "@/lib/api/dto";
 import { toTicketPayment } from "@/lib/api/mappers-commerce";
 import {
@@ -27,6 +28,7 @@ import {
   toTicket,
   toTimelineEvent,
   toUser,
+  toRepairFinding,
 } from "@/lib/api/mappers";
 import type {
   DashboardSummary,
@@ -443,6 +445,56 @@ export function createLiveApi(
       /* The events ledger is append-only server-side and only writes on
          create/update/transition — there is no free-note endpoint yet. */
       throw notImplemented("Adding a standalone note");
+    },
+
+    /* ── Findings ──────────────────────────────────────────────────────
+       Wired to the contract in docs/backend-findings-spec.md. Until the
+       API ships it, GET 404s (read as "none recorded") and PUT surfaces
+       whatever the server says. No frontend change needed on ship. */
+
+    async getFinding(ticketId) {
+      try {
+        const { data } = await client.get<RepairFindingDto>(
+          `/tickets/${ticketId}/finding`,
+        );
+        return toRepairFinding(data);
+      } catch (caught) {
+        /* No findings yet is the normal case, not an error. */
+        if (caught instanceof ApiError && caught.code === "NOT_FOUND") return null;
+        throw caught;
+      }
+    },
+
+    async saveFinding({ ticketId, ...input }) {
+      try {
+        const { data } = await client.put<RepairFindingDto>(
+          `/tickets/${ticketId}/finding`,
+          {
+            body: {
+              summary: input.summary.trim(),
+              details: input.details?.trim() || null,
+              root_cause: input.rootCause,
+              defects: input.defects,
+              resolution: input.resolution,
+              technician_notes: input.technicianNotes?.trim() || null,
+              qc_passed: input.qcPassed ?? null,
+            },
+          },
+        );
+        return toRepairFinding(data);
+      } catch (caught) {
+        /* A 404 on a PUT means the route is missing, not the ticket — the
+           ticket was just loaded. Say which, or the bench is told to go look
+           for a record that is sitting right in front of them. */
+        if (caught instanceof ApiError && caught.code === "NOT_FOUND") {
+          throw new ApiError(
+            "Recording findings is not in the API yet.",
+            "The findings endpoint has not shipped. Nothing was saved — keep the details in a ticket note for now.",
+            { code: "NOT_IMPLEMENTED" },
+          );
+        }
+        throw caught;
+      }
     },
 
     /* ── Customers ─────────────────────────────────────────────────── */

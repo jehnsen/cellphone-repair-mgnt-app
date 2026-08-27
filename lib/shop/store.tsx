@@ -313,11 +313,23 @@ export function useQuery<T>(
   return { data, loading, error, refetch };
 }
 
+/** What `mutate()` resolves to: the result, plus the error if it failed. */
+export type MutationOutcome<TResult> = {
+  /** The successful result, or `undefined` if the call threw. */
+  data: TResult | undefined;
+  /**
+   * The error this call threw, if any. Read this instead of the hook's `error`
+   * field right after awaiting: that field is a render-time snapshot and, in
+   * the same tick as a failed call, still holds the *previous* error.
+   */
+  error: Error | null;
+};
+
 /** Mutations: same shape everywhere, so buttons can show pending state. */
 export function useMutation<TArgs extends unknown[], TResult>(
   run: (api: ShopApi, ...args: TArgs) => Promise<TResult>,
 ): {
-  mutate: (...args: TArgs) => Promise<TResult | undefined>;
+  mutate: (...args: TArgs) => Promise<MutationOutcome<TResult>>;
   pending: boolean;
   error: Error | null;
 } {
@@ -328,14 +340,16 @@ export function useMutation<TArgs extends unknown[], TResult>(
   runRef.current = run;
 
   const mutate = useCallback(
-    async (...args: TArgs) => {
+    async (...args: TArgs): Promise<MutationOutcome<TResult>> => {
       setPending(true);
       setError(null);
       try {
-        return await runRef.current(api, ...args);
+        const data = await runRef.current(api, ...args);
+        return { data, error: null };
       } catch (caught) {
-        setError(caught as Error);
-        return undefined;
+        const failure = caught as Error;
+        setError(failure);
+        return { data: undefined, error: failure };
       } finally {
         setPending(false);
       }

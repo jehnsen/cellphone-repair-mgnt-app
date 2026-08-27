@@ -81,6 +81,31 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * What a `toast.error(...)` should say for any thrown value.
+ *
+ * A 422 puts the useful text in `details[].messages` ("The mobile has already
+ * been taken."), not the top-level `message` ("The given data was invalid.") —
+ * so lead with the field summary and let `hint` be the description. Anything
+ * that isn't an `ApiError` falls back to its own message.
+ */
+export function toastError(caught: unknown, fallback = "Something went wrong."): {
+  message: string;
+  description?: string;
+} {
+  if (caught instanceof ApiError) {
+    const fields = caught.fieldSummary;
+    return {
+      message: fields || caught.message,
+      description: fields ? caught.hint : caught.hint || undefined,
+    };
+  }
+  if (caught instanceof Error && caught.message) {
+    return { message: caught.message };
+  }
+  return { message: fallback };
+}
+
 /** The sentence staff read under the red headline, chosen by error code. */
 export function hintForCode(code: ApiErrorCode, status: number): string {
   switch (code) {

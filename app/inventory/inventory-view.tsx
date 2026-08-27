@@ -40,6 +40,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { toastError } from "@/lib/api/errors";
 import { isLowStock, itemStock } from "@/lib/shop/queries";
 import { formatDate, formatImei, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -426,7 +427,7 @@ function ReceiveDialog({
     : Number(quantity) > 0 && !receive.pending;
 
   const submit = async () => {
-    const result = await receive.mutate({
+    const { data: result, error } = await receive.mutate({
       itemId: item.id,
       quantity: isHandset ? undefined : Number(quantity),
       units: isHandset
@@ -454,8 +455,9 @@ function ReceiveDialog({
           : `Received ${quantity} × ${item.name}.`,
       );
       onClose();
-    } else if (receive.error) {
-      toast.error(receive.error.message);
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not receive the stock.");
+      toast.error(message, { description });
     }
   };
 
@@ -691,7 +693,7 @@ function AdjustDialog({
     (isHandset ? Boolean(unitId) : Number(quantity) !== 0);
 
   const submit = async () => {
-    const result = await adjust.mutate({
+    const { data: result, error } = await adjust.mutate({
       itemId: item.id,
       quantity: isHandset ? undefined : Number(quantity),
       unitId: isHandset ? unitId : undefined,
@@ -704,8 +706,9 @@ function AdjustDialog({
     if (result) {
       toast.success(`Adjusted ${item.name}.`);
       onClose();
-    } else if (adjust.error) {
-      toast.error(adjust.error.message);
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not adjust the stock.");
+      toast.error(message, { description });
     }
   };
 

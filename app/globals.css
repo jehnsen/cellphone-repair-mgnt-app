@@ -386,10 +386,13 @@
     position: static !important;
   }
 
+  /* Deliberately in normal flow. `position: absolute` here escapes the
+     @page margin box and pins the sheet to the physical paper corner, so
+     the rules run off the edge and the last copy is cut off. The document
+     is already portalled onto <body>, so it needs no positioning to leave
+     the dialog's stacking context. */
   .print-only {
     display: block;
-    position: absolute;
-    inset: 0 auto auto 0;
     width: 100%;
     background: #fff;
     color: #000;
@@ -397,7 +400,7 @@
 
   @page {
     size: auto;
-    margin: 10mm;
+    margin: 12mm;
   }
 
   html,

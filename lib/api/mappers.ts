@@ -14,6 +14,7 @@ import type {
   TicketQuoteDto,
   PaymentDto,
   UserDto,
+  RepairFindingDto,
 } from "@/lib/api/dto";
 import type {
   ConditionCheck,
@@ -35,6 +36,7 @@ import type {
   TurnedOverAccessory,
   UnlockMethod,
   User,
+  RepairFinding,
 } from "@/lib/types";
 
 /**
@@ -460,4 +462,27 @@ export function customerDeviceLabel(dto: CustomerDeviceDto): string {
   return [dto.device_model?.brand?.name, dto.device_model?.name, dto.color]
     .filter(Boolean)
     .join(" · ");
+}
+
+/**
+ * The server enums are authoritative; anything unrecognised is passed through
+ * rather than dropped, so a value added server-side shows as its raw key
+ * instead of vanishing from a technician's record.
+ */
+export function toRepairFinding(dto: RepairFindingDto): RepairFinding {
+  return {
+    id: dto.ulid,
+    summary: dto.summary,
+    details: dto.details ?? undefined,
+    rootCause: dto.root_cause as RepairFinding["rootCause"],
+    defects: (dto.defects ?? []) as RepairFinding["defects"],
+    resolution: dto.resolution as RepairFinding["resolution"],
+    technicianNotes: dto.technician_notes ?? undefined,
+    qcPassed: dto.qc_passed ?? undefined,
+    qcCheckedAt: dto.qc_checked_at ?? undefined,
+    qcCheckedBy: dto.qc_checked_by?.ulid,
+    recordedBy: dto.recorded_by?.ulid ?? "",
+    createdAt: dto.created_at ?? new Date().toISOString(),
+    updatedAt: dto.updated_at ?? dto.created_at ?? new Date().toISOString(),
+  };
 }

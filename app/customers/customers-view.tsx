@@ -31,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { EmptyState } from "@/components/ui/states";
 import { StatusChip } from "@/components/tag/status-chip";
 import { useMutation, useShop } from "@/lib/shop/store";
+import { toastError } from "@/lib/api/errors";
 import { STATUS_META } from "@/lib/status";
 import { formatDate, formatImei, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -482,13 +483,14 @@ function CustomerDialog({
       notes: notes.trim() || undefined,
     };
 
-    const result = await save.mutate(draft, customer?.id);
+    const { data: result, error } = await save.mutate(draft, customer?.id);
     if (result) {
       toast.success(isEdit ? `${result.name} updated.` : `${result.name} added.`);
       onCreated?.(result);
       onClose();
-    } else if (save.error) {
-      toast.error(save.error.message);
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not save the customer.");
+      toast.error(message, { description });
     }
   };
 

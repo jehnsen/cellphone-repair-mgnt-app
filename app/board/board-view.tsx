@@ -3,7 +3,15 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Columns3, ListFilter, PackageCheck, PackageOpen, Table2, X } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Columns3,
+  ListFilter,
+  PackageCheck,
+  PackageOpen,
+  Table2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
 import { Panel, PanelBody, PanelScroller } from "@/components/ui/panel";
@@ -29,10 +37,32 @@ import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { AgingStrip } from "@/components/tag/aging-strip";
 import { StatusChip } from "@/components/tag/status-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { toastError } from "@/lib/api/errors";
 import { agingOf, BOARD_STATUSES, nextStatuses, STATUS_META } from "@/lib/status";
 import { dueLabel, shortAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Ticket } from "@/lib/types";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { Ticket, TicketStatus } from "@/lib/types";
+
+/* Moves the generic mover offers, in board order. Release and ready-for-pickup
+   are excluded: they have dedicated buttons because each needs more than a
+   status change (a claimant and payment; a pickup notice). */
+const BOARD_MOVES: TicketStatus[] = [
+  "diagnosed",
+  "awaiting_approval",
+  "awaiting_parts",
+  "in_repair",
+  "qc",
+  "unrepairable",
+  "returned_as_is",
+];
 
 export function BoardView() {
   const router = useRouter();
@@ -40,7 +70,7 @@ export function BoardView() {
   const search = searchParams.get("q") ?? "";
   const overdueOnly = searchParams.get("overdue") === "1";
 
-  const { db, user } = useShop();
+  const { db, user, api } = useShop();
   const { data: tickets, loading, error, refetch } = useQuery((api) =>
     api.getTickets({ includeReleased: false }),
   );
@@ -52,6 +82,13 @@ export function BoardView() {
   const markReady = useMutation((api, ticketIds: string[]) =>
     api.markReadyForPickup({ ticketIds, actorId: user.id }),
   );
+
+  /* One transition at a time, applied across the selection. The server is the
+     authority on whether a move is legal, so a rejection stops the run rather
+     than pressing on and leaving the board half-moved. */
+  const [moveTo, setMoveTo] = useState<TicketStatus | null>(null);
+  const [note, setNote] = useState("");
+  const [moving, setMoving] = useState(false);
 
   const brands = useMemo(
     () => Array.from(new Set((tickets ?? []).map((t) => t.device.brand))).sort(),
@@ -107,6 +144,49 @@ export function BoardView() {
   const canMarkReady =
     selectedTickets.length > 0 &&
     selectedTickets.every((t) => nextStatuses(t.status).includes("ready_for_pickup"));
+
+  /* Only moves legal for EVERY selected ticket are offered, so a mixed
+     selection can never half-apply. Release and pickup have their own
+     dedicated buttons (and their own screens), so they are not repeated
+     in the generic mover. */
+  const commonMoves = useMemo<TicketStatus[]>(() => {
+    if (!selectedTickets.length) return [];
+    const sets = selectedTickets.map((t) => new Set(nextStatuses(t.status)));
+    return BOARD_MOVES.filter((status) => sets.every((set) => set.has(status)));
+  }, [selectedTickets]);
+
+  const applyMove = async () => {
+    if (!moveTo || !selectedTickets.length) return;
+    setMoving(true);
+    const label = STATUS_META[moveTo].label.toLowerCase();
+    let done = 0;
+    try {
+      for (const ticket of selectedTickets) {
+        await api.setTicketStatus({
+          ticketId: ticket.id,
+          status: moveTo,
+          actorId: user.id,
+          note: note.trim() || undefined,
+        });
+        done += 1;
+      }
+      toast.success(`Moved ${done} ticket${done === 1 ? "" : "s"} to ${label}.`);
+      setMoveTo(null);
+      setNote("");
+      clearSelection();
+    } catch (caught) {
+      /* Some may already have moved — say so rather than implying none did. */
+      const { message, description } = toastError(caught, "Could not move the ticket.");
+      toast.error(message, {
+        description: done
+          ? `${done} moved before this failed. ${description ?? ""}`.trim()
+          : description,
+      });
+    } finally {
+      setMoving(false);
+      refetch();
+    }
+  };
 
   /* Release handles one unit at a time — one claimant, one payment, one
      warranty slip — so this only offers itself on a single selection. */
@@ -205,6 +285,25 @@ export function BoardView() {
             {selected.size} selected
           </span>
 
+          {commonMoves.length ? (
+            <Select
+              value={moveTo ?? ""}
+              onValueChange={(v) => setMoveTo(v as TicketStatus)}
+            >
+              <SelectTrigger size="sm" className="w-auto min-w-40 bg-copy">
+                <ArrowRightLeft className="size-3.5" aria-hidden />
+                <SelectValue placeholder="Move to…" />
+              </SelectTrigger>
+              <SelectContent>
+                {commonMoves.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {STATUS_META[status].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+
           {canMarkReady ? (
             <Button
               size="sm"
@@ -213,10 +312,16 @@ export function BoardView() {
               disabled={markReady.pending}
               onClick={() => {
                 const ids = Array.from(selected);
-                markReady.mutate(ids).then((result) => {
+                markReady.mutate(ids).then(({ data: result, error }) => {
                   if (result) {
                     toast.success(`Marked ${result.length} ticket${result.length === 1 ? "" : "s"} ready for pickup.`);
                     clearSelection();
+                  } else if (error) {
+                    const { message, description } = toastError(
+                      error,
+                      "Could not mark the tickets ready.",
+                    );
+                    toast.error(message, { description });
                   }
                 });
               }}
@@ -357,7 +462,12 @@ export function BoardView() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <AgingStrip aging={aging} className="h-6" />
-                              <span className="mono font-semibold text-ink">{ticket.ticketNo}</span>
+                              <Link
+                                href={`/board/${ticket.id}`}
+                                className="mono font-semibold text-ink hover:text-bench-ink hover:underline"
+                              >
+                                {ticket.ticketNo}
+                              </Link>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -387,6 +497,82 @@ export function BoardView() {
           </Panel>
         </TabsContent>
       </Tabs>
+
+      {/* Confirm the move and, optionally, say why. The note lands on the
+          ticket's timeline, which is the only durable record of why a job
+          changed hands. */}
+      <Dialog
+        open={Boolean(moveTo)}
+        onOpenChange={(open) => {
+          if (!open && !moving) {
+            setMoveTo(null);
+            setNote("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Move {selectedTickets.length} ticket
+              {selectedTickets.length === 1 ? "" : "s"} to{" "}
+              {moveTo ? STATUS_META[moveTo].label.toLowerCase() : ""}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <ul className="max-h-40 divide-y divide-rule-soft overflow-y-auto rounded-lg border border-rule">
+              {selectedTickets.map((ticket) => {
+                const customer = db.customers.find((c) => c.id === ticket.customerId);
+                return (
+                  <li
+                    key={ticket.id}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs"
+                  >
+                    <span className="mono font-semibold text-ink">
+                      {ticket.ticketNo}
+                    </span>
+                    <StatusChip status={ticket.status} showLabel={false} />
+                    <span className="truncate text-ink-soft">
+                      {customer?.name ?? "Walk-in"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="move-note">Note (optional)</Label>
+              <Textarea
+                id="move-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                placeholder={
+                  moveTo === "unrepairable"
+                    ? "Why the unit cannot be repaired — the customer will be told this."
+                    : "What changed, for the ticket's timeline."
+                }
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={moving}
+                onClick={() => {
+                  setMoveTo(null);
+                  setNote("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={applyMove} disabled={moving}>
+                {moving ? "Moving…" : "Move"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -422,7 +608,12 @@ function BoardCard({
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <span className="mono text-xs font-semibold text-ink">{ticket.ticketNo}</span>
+              <Link
+                href={`/board/${ticket.id}`}
+                className="mono text-xs font-semibold text-ink hover:text-bench-ink hover:underline"
+              >
+                {ticket.ticketNo}
+              </Link>
               {aging.stalled ? (
                 <span className="label-pad text-[0.5625rem] text-flag-ink">stalled</span>
               ) : null}

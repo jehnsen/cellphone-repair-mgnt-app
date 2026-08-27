@@ -26,7 +26,7 @@ import { PrintDocument } from "@/components/print/print-document";
 import { ClaimStub } from "@/components/print/claim-stub";
 import { useQuery, useShop } from "@/lib/shop/store";
 import { formatDate, isValidImei, peso } from "@/lib/format";
-import { ApiError } from "@/lib/api/errors";
+import { toastError } from "@/lib/api/errors";
 import { agingOf } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { PROBLEM_LABEL, PROBLEM_TAGS } from "@/lib/problems";
@@ -204,16 +204,8 @@ export default function IntakePage() {
     } catch (error) {
       /* A 422 names the field it rejected; show that rather than the generic
          "The given data was invalid", which tells the counter nothing. */
-      if (error instanceof ApiError) {
-        const fields = error.fieldSummary;
-        toast.error(fields || error.message, {
-          description: fields ? error.hint : undefined,
-        });
-      } else {
-        toast.error(
-          error instanceof Error ? error.message : "Could not create the job order.",
-        );
-      }
+      const { message, description } = toastError(error, "Could not create the job order.");
+      toast.error(message, { description });
     } finally {
       setSubmitting(false);
     }

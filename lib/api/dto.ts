@@ -318,3 +318,20 @@ export interface ShiftDto {
   is_open: boolean;
   cash_movements?: CashMovementDto[];
 }
+
+/** See docs/backend-findings-spec.md. Not served by the API yet. */
+export interface RepairFindingDto {
+  ulid: string;
+  summary: string;
+  details?: string | null;
+  root_cause: string;
+  defects?: string[] | null;
+  resolution: string;
+  technician_notes?: string | null;
+  qc_passed?: boolean | null;
+  qc_checked_at?: string | null;
+  qc_checked_by?: { ulid: string; name?: string } | null;
+  recorded_by?: { ulid: string; name?: string } | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}

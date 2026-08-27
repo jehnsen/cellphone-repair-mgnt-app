@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/states";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { toastError } from "@/lib/api/errors";
 import { itemStock } from "@/lib/shop/queries";
 import { computeTax } from "@/lib/vat";
 import { peso } from "@/lib/format";
@@ -243,7 +244,7 @@ export function PosView() {
 
   const charge = async () => {
     if (!canCharge) return;
-    const result = await createSale.mutate({
+    const { data: result, error } = await createSale.mutate({
       lines: cart.map((line) => ({
         kind: line.kind,
         itemId: line.itemId,
@@ -278,8 +279,9 @@ export function PosView() {
       toast.success(`${result.saleNo} — ${peso(result.totalDue)} charged.`);
       clearCart();
       refetchShift();
-    } else if (createSale.error) {
-      toast.error(createSale.error.message);
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not complete the sale.");
+      toast.error(message, { description });
     }
   };
 
@@ -309,12 +311,18 @@ export function PosView() {
               className="w-full"
               disabled={openShiftMut.pending}
               onClick={async () => {
-                const result = await openShiftMut.mutate(Number(startingCash) || 0);
+                const { data: result, error } = await openShiftMut.mutate(
+                  Number(startingCash) || 0,
+                );
                 if (result) {
                   toast.success(`Shift ${result.shiftNo} open.`);
                   refetchShift();
-                } else if (openShiftMut.error) {
-                  toast.error(openShiftMut.error.message);
+                } else if (error) {
+                  const { message, description } = toastError(
+                    error,
+                    "Could not open the shift.",
+                  );
+                  toast.error(message, { description });
                 }
               }}
             >

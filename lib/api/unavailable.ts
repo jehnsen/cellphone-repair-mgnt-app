@@ -117,6 +117,16 @@ export function createUnavailableApi(): ShopApi {
       throw missing("Adding a standalone note", "ticket note");
     },
 
+    /* Findings are specced but not built server-side yet — see
+       docs/backend-findings-spec.md. Reading answers "none recorded" so the
+       detail page renders; saving fails loudly rather than losing the work. */
+    async getFinding() {
+      return null;
+    },
+    async saveFinding() {
+      throw missing("Recording findings", "PUT /tickets/{ulid}/finding");
+    },
+
     async getDashboard() {
       return {
         todaySales: 0,
