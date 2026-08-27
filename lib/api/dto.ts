@@ -195,3 +195,126 @@ export interface TokenDto {
   token: string;
   token_type: string;
 }
+
+/* ── Inventory ledger, POS, and the drawer ──────────────────────────── */
+
+export interface SupplierDto {
+  ulid: string;
+  name: string;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  terms?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
+}
+
+export interface SerializedUnitDto {
+  ulid: string;
+  imei?: string | null;
+  serial_number?: string | null;
+  condition: "brand_new" | "open_box" | "secondhand" | "refurbished";
+  grade?: string | null;
+  /** Permission-gated, like a product's cost. */
+  acquisition_cost?: number | string | null;
+  acquisition_source?: string | null;
+  status: "in_stock" | "reserved" | "sold" | "for_repair" | "written_off";
+  warranty_terms?: string | null;
+  product?: ProductDto | null;
+  created_at?: string | null;
+}
+
+export interface StockLevelDto {
+  product?: ProductDto | null;
+  on_hand_qty: number | string;
+  reserved_qty: number | string;
+  available_qty: number | string;
+  updated_at?: string | null;
+}
+
+export interface StockMovementDto {
+  ulid: string;
+  product?: ProductDto | null;
+  serialized_unit?: SerializedUnitDto | null;
+  quantity: number | string;
+  unit_cost?: number | string | null;
+  movement_type: string;
+  reference_type?: string | null;
+  reason_code?: string | null;
+  balance_after?: number | string | null;
+  actor?: UserDto | null;
+  occurred_at?: string | null;
+}
+
+export interface PaymentDto {
+  ulid: string;
+  method: string;
+  amount: number | string;
+  reference_number?: string | null;
+  tendered?: number | string | null;
+  change_given?: number | string | null;
+  actor?: UserDto | null;
+  created_at?: string | null;
+}
+
+export interface DiscountDto {
+  type: "percent" | "amount" | "senior_citizen" | "pwd";
+  value: number | string;
+  scope?: string | null;
+  id_type?: string | null;
+  id_number?: string | null;
+  cardholder_name?: string | null;
+}
+
+export interface SaleLineDto {
+  sellable_type: "product" | "serialized_unit" | "service";
+  sellable?: ProductDto | SerializedUnitDto | ServiceDto | null;
+  quantity: number | string;
+  unit_price: number | string;
+  unit_cost?: number | string | null;
+  line_discount?: number | string | null;
+  amount: number | string;
+}
+
+export interface SaleDto {
+  ulid: string;
+  sale_number: string;
+  status: "completed" | "refunded" | "partially_refunded" | "void";
+  source?: string | null;
+  subtotal: number | string;
+  discount_total: number | string;
+  vatable_sales: number | string;
+  vat_exempt_sales: number | string;
+  zero_rated_sales: number | string;
+  vat_amount: number | string;
+  total: number | string;
+  void_reason?: string | null;
+  customer?: CustomerDto | null;
+  cashier?: UserDto | null;
+  lines?: SaleLineDto[];
+  discounts?: DiscountDto[];
+  payments?: PaymentDto[];
+  created_at?: string | null;
+}
+
+export interface CashMovementDto {
+  direction: "in" | "out";
+  amount: number | string;
+  reason: string;
+  actor?: UserDto | null;
+  created_at?: string | null;
+}
+
+export interface ShiftDto {
+  ulid: string;
+  cashier?: UserDto | null;
+  opened_at?: string | null;
+  opening_float: number | string;
+  closed_at?: string | null;
+  counted_cash?: number | string | null;
+  expected_cash?: number | string | null;
+  variance?: number | string | null;
+  notes?: string | null;
+  is_open: boolean;
+  cash_movements?: CashMovementDto[];
+}

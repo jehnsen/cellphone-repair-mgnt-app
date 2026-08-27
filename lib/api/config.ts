@@ -19,8 +19,7 @@ export const STORAGE = {
 
 /** Endpoints that do not exist yet, named where the user can see them. */
 export const PENDING_CONTEXTS = [
-  "Point of sale, receipts, and returns",
-  "Cash drawer and shifts",
-  "Stock levels, movements, and suppliers",
-  "Sales figures and margin reports",
+  "Standalone ticket notes without a status change",
+  "Warranty slips and warranty claim tickets",
+  "Notification templates and the Viber/SMS outbox",
 ] as const;

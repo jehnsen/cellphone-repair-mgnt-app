@@ -2,15 +2,16 @@ import { ApiError } from "@/lib/api/errors";
 import type { ShopApi } from "@/lib/shop/contract";
 
 /**
- * The half of the shop the API has not built yet.
+ * The floor under the live client.
  *
- * Point of sale, the cash drawer, the stock ledger, suppliers, and the sales
- * side of reports have no endpoints. Rather than invent rows to fill the
- * screens, reads answer empty — so every list shows its own empty state — and
- * writes fail loudly with the reason.
+ * Every `ShopApi` method has an implementation here so the object is always
+ * complete; `createLiveApi` and `createCommerceApi` override the ones the
+ * server actually serves. What is left over answers honestly: reads come back
+ * empty, writes fail with the reason rather than pretending to save.
  *
- * When an endpoint ships, delete its method here and implement it in
- * `live-api.ts`; nothing else has to change.
+ * As of the current API, only `addNote` survives this file at runtime — the
+ * event ledger writes on create, update, and transition, and has no
+ * free-standing note endpoint.
  */
 
 const missing = (what: string, endpoint: string) =>
@@ -22,8 +23,6 @@ const missing = (what: string, endpoint: string) =>
 
 export function createUnavailableApi(): ShopApi {
   return {
-    /* Repairs, customers, and the catalog are all implemented live; these
-       stubs only stand in until `createLiveApi` overrides them. */
     async getTickets() {
       return [];
     },
@@ -66,9 +65,6 @@ export function createUnavailableApi(): ShopApi {
     async assignTechnician() {
       throw missing("Assigning a technician", "PATCH /tickets/{id}");
     },
-    async addNote() {
-      throw missing("Adding a note", "note");
-    },
     async markReadyForPickup() {
       throw missing("Marking ready for pickup", "POST /tickets/{id}/transition");
     },
@@ -78,9 +74,6 @@ export function createUnavailableApi(): ShopApi {
     async getDeviceCatalog() {
       return { brands: [], models: [] };
     },
-
-    /* ── Genuinely not built server-side ───────────────────────────── */
-
     async getMovements() {
       return [];
     },
@@ -88,19 +81,19 @@ export function createUnavailableApi(): ShopApi {
       return [];
     },
     async receiveStock() {
-      throw missing("Receiving stock", "goods receipt");
+      throw missing("Receiving stock", "POST /goods-receipts");
     },
     async adjustStock() {
-      throw missing("Adjusting stock", "stock adjustment");
+      throw missing("Adjusting stock", "POST /stock-adjustments");
     },
     async getSales() {
       return [];
     },
     async getSale() {
-      throw missing("Sale detail", "sales");
+      throw missing("Sale detail", "GET /sales/{id}");
     },
     async createSale() {
-      throw missing("Ringing up a sale", "point of sale");
+      throw missing("Ringing up a sale", "POST /sales");
     },
     async getShifts() {
       return [];
@@ -109,13 +102,19 @@ export function createUnavailableApi(): ShopApi {
       return null;
     },
     async openShift() {
-      throw missing("Opening a shift", "cash drawer");
+      throw missing("Opening a shift", "POST /shifts/open");
     },
     async closeShift() {
-      throw missing("Closing a shift", "cash drawer");
+      throw missing("Closing a shift", "POST /shifts/{id}/close");
     },
     async addCashMovement() {
-      throw missing("Recording cash in or out", "cash drawer");
+      throw missing("Recording cash in or out", "POST /shifts/{id}/cash-movements");
+    },
+
+    /* Still genuinely absent: the ledger only writes on create, update, and
+       transition, so a note with no status change has nowhere to go. */
+    async addNote() {
+      throw missing("Adding a standalone note", "ticket note");
     },
 
     async getDashboard() {

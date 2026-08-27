@@ -8,22 +8,31 @@ import {
 } from "@/lib/api/mappers";
 import { createLiveApi, dashboardFromTickets, type LiveContext } from "@/lib/api/live-api";
 import { createUnavailableApi } from "@/lib/api/unavailable";
+import { createCommerceApi, loadInventory } from "@/lib/api/live-commerce";
+import { toSale, toShift, toSupplier } from "@/lib/api/mappers-commerce";
 import type { HttpClient } from "@/lib/api/http";
 import type {
   BranchDto,
   CustomerDto,
   ProductDto,
   RepairTicketDto,
+  SaleDto,
   ServiceDto,
+  ShiftDto,
+  SupplierDto,
   UserDto,
 } from "@/lib/api/dto";
+import { money, manilaDayKey } from "@/lib/format";
 import type { ShopApi } from "@/lib/shop/contract";
 import { EMPTY_DB, type ShopAction } from "@/lib/shop/reducer";
 import type {
   Customer,
   Database,
   InventoryItem,
+  Sale,
   ServiceItem,
+  Shift,
+  Supplier,
   Ticket,
   User,
 } from "@/lib/types";
@@ -70,19 +79,44 @@ export function createShopApi({
   dispatch,
   dispatchQuiet,
 }: ShopApiDeps): ShopApi {
-  const api: ShopApi = { ...createUnavailableApi(), ...createLiveApi(client, context) };
+  const api: ShopApi = {
+    ...createUnavailableApi(),
+    ...createLiveApi(client, context),
+    ...createCommerceApi(client, context),
+  };
 
   /* The day sheet's counts.
-     This deliberately re-reads the tickets rather than counting the local
-     cache: the overdue and ready badges are the numbers this shop is run on,
+     This deliberately re-reads rather than counting the local cache: the
+     overdue, ready, and drawer figures are the numbers this shop is run on,
      and a count that lags an action would be worse than a slow one. The cost
-     is paid once — the request is identical to the board's, so the HTTP layer
-     collapses them into a single walk. */
-  const unavailableDashboard = api.getDashboard;
+     is paid once — each request is identical to the one the matching screen
+     makes, so the HTTP layer collapses them into a single walk. */
+  const emptyDashboard = api.getDashboard;
   api.getDashboard = async () => {
-    const base = await unavailableDashboard();
-    const tickets = await api.getTickets({});
-    return dashboardFromTickets(tickets, base);
+    const base = await emptyDashboard();
+
+    const [tickets, items, openShift, sales] = await Promise.all([
+      api.getTickets({}),
+      api.getItems({}).catch(() => []),
+      api.getOpenShift().catch(() => null),
+      api.getSales({ from: startOfToday() }).catch(() => []),
+    ]);
+
+    const summary = dashboardFromTickets(tickets, base);
+    const takings = sales.filter((sale) => sale.status !== "void");
+
+    return {
+      ...summary,
+      todaySales: money(takings.reduce((sum, sale) => sum + sale.totalDue, 0)),
+      todaySaleCount: takings.length,
+      lowStock: items.filter(
+        (item) => item.quantityOnHand <= item.reorderPoint && item.active,
+      ).length,
+      /* `expected_cash` is the server's own reconciliation — never recomputed
+         here, or the drawer would disagree with the close-out report. */
+      cashOnHand: openShift?.expectedCash ?? openShift?.startingCash ?? null,
+      openShiftId: openShift?.id ?? null,
+    };
   };
 
   return wrap(api, { getDb, dispatch, dispatchQuiet });
@@ -175,6 +209,11 @@ function sameIds<T extends { id: string }>(a: T[], b: T[]): boolean {
   return a.length === b.length && a.every((row, index) => row.id === b[index]?.id);
 }
 
+/** Midnight Manila, as an ISO instant the sales filter understands. */
+function startOfToday(): string {
+  return `${manilaDayKey(new Date())}T00:00:00+08:00`;
+}
+
 /* ── Bootstrap ───────────────────────────────────────────────────────── */
 
 export interface BootstrapResult {
@@ -199,29 +238,40 @@ export async function bootstrapShop(
     return fallback;
   };
 
-  const [customers, users, tickets, items, services] = await Promise.all([
-    client
-      .getAll<CustomerDto>("/customers")
-      .then((rows) => rows.map(toCustomer))
-      .catch(failed("Customers", [] as Customer[])),
-    client
-      .getAll<UserDto>("/users")
-      .then((rows) => rows.map(toUser))
-      /* Cashiers and technicians cannot list staff — expected, not a warning. */
-      .catch(() => [] as User[]),
-    client
-      .getAll<RepairTicketDto>("/tickets", { query: { sort: "-created_at" } })
-      .then((rows) => rows.map((dto) => toTicket(dto)))
-      .catch(failed("Repair tickets", [] as Ticket[])),
-    client
-      .getAll<ProductDto>("/products", { query: { include: "compatibleDeviceModels" } })
-      .then((rows) => rows.map(toInventoryItem))
-      .catch(failed("The product catalog", [] as InventoryItem[])),
-    client
-      .getAll<ServiceDto>("/services")
-      .then((rows) => rows.map(toServiceItem))
-      .catch(failed("The service list", [] as ServiceItem[])),
-  ]);
+  const [customers, users, tickets, items, services, suppliers, sales, shifts] =
+    await Promise.all([
+      client
+        .getAll<CustomerDto>("/customers")
+        .then((rows) => rows.map(toCustomer))
+        .catch(failed("Customers", [] as Customer[])),
+      client
+        .getAll<UserDto>("/users")
+        .then((rows) => rows.map(toUser))
+        /* Cashiers and technicians cannot list staff — expected, not a warning. */
+        .catch(() => [] as User[]),
+      client
+        .getAll<RepairTicketDto>("/tickets", { query: { sort: "-created_at" } })
+        .then((rows) => rows.map((dto) => toTicket(dto)))
+        .catch(failed("Repair tickets", [] as Ticket[])),
+      /* Catalog plus stock levels plus serialized units, in one shape. */
+      loadInventory(client).catch(failed("Inventory", [] as InventoryItem[])),
+      client
+        .getAll<ServiceDto>("/services")
+        .then((rows) => rows.map(toServiceItem))
+        .catch(failed("The service list", [] as ServiceItem[])),
+      client
+        .getAll<SupplierDto>("/suppliers", { query: { sort: "name" } })
+        .then((rows) => rows.map(toSupplier))
+        .catch(failed("Suppliers", [] as Supplier[])),
+      client
+        .getAll<SaleDto>("/sales", { query: { sort: "-created_at" } })
+        .then((rows) => rows.map(toSale))
+        .catch(failed("Sales", [] as Sale[])),
+      client
+        .getAll<ShiftDto>("/shifts", { query: { sort: "-opened_at" } })
+        .then((rows) => rows.map(toShift))
+        .catch(failed("Shifts", [] as Shift[])),
+    ]);
 
   return {
     db: {
@@ -231,8 +281,13 @@ export async function bootstrapShop(
       tickets,
       items,
       services,
-      /* Timelines are fetched per ticket, so nothing is preloaded here. */
+      suppliers,
+      sales,
+      shifts,
+      /* Timelines and stock movements are fetched per record, so nothing is
+         preloaded here. */
       timeline: [],
+      movements: [],
       shop: branch ? toShopProfile(branch, EMPTY_DB.shop) : EMPTY_DB.shop,
     },
     warnings,

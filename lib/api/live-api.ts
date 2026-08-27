@@ -14,10 +14,12 @@ import type {
   TicketEventDto,
   TicketLineDto,
   TicketPhotoDto,
+  PaymentDto,
   TicketQuoteDto,
   TokenDto,
   UserDto,
 } from "@/lib/api/dto";
+import { toTicketPayment } from "@/lib/api/mappers-commerce";
 import {
   promisedDateFor,
   toCustomer,
@@ -125,15 +127,34 @@ export async function signOutRemote(client: HttpClient): Promise<void> {
   }
 }
 
+/**
+ * Money on a ticket goes through its own endpoint — a repair is never wrapped
+ * in a sale to collect payment. Used by release, and by the payments tab.
+ */
+export async function recordTicketPayment(
+  client: HttpClient,
+  ticketUlid: string,
+  payment: { amount: number; method: string; reference?: string; tendered?: number },
+): Promise<void> {
+  await client.post(`/tickets/${ticketUlid}/payments`, {
+    body: {
+      method: payment.method,
+      amount: money(payment.amount),
+      reference_number: payment.reference ?? null,
+      tendered: payment.tendered ?? null,
+    },
+  });
+}
+
 /* ── The client ──────────────────────────────────────────────────────── */
 
 export function createLiveApi(
   client: HttpClient,
   context: LiveContext,
 ): Partial<ShopApi> {
-  /** Ticket detail needs three calls the list does not; keep them together. */
+  /** Ticket detail needs four calls the list does not; keep them together. */
   const loadTicketExtras = async (ulid: string) => {
-    const [lines, photos, quotes] = await Promise.all([
+    const [lines, photos, quotes, payments] = await Promise.all([
       client
         .get<TicketLineDto[]>(`/tickets/${ulid}/lines`)
         .then((response) => response.data ?? [])
@@ -146,8 +167,12 @@ export function createLiveApi(
         .get<TicketQuoteDto[]>(`/tickets/${ulid}/quotes`)
         .then((response) => response.data ?? [])
         .catch(() => [] as TicketQuoteDto[]),
+      client
+        .get<PaymentDto[]>(`/tickets/${ulid}/payments`)
+        .then((response) => response.data ?? [])
+        .catch(() => [] as PaymentDto[]),
     ]);
-    return { lines, photos, quotes };
+    return { lines, photos, quotes, payments };
   };
 
   /* Only the filters the server allow-lists are pushed down; the rest are
@@ -388,13 +413,15 @@ export function createLiveApi(
     },
 
     async releaseTicket({ ticketId, releasedTo, payment }) {
-      /* Settle the balance first: the API refuses edits once a ticket is
-         released, and `downpayment` is the only money field it takes. */
+      /* Settle the balance first — the server refuses to release a ticket that
+         still owes money, and refuses edits once it is released. This posts a
+         real payment against the ticket rather than nudging `downpayment`. */
       if (payment && payment.amount > 0) {
-        const current = await client.get<RepairTicketDto>(`/tickets/${ticketId}`);
-        const paid = Number(current.data.downpayment ?? 0);
-        await client.patch<RepairTicketDto>(`/tickets/${ticketId}`, {
-          body: { downpayment: money(paid + payment.amount) },
+        await recordTicketPayment(client, ticketId, {
+          amount: payment.amount,
+          method: payment.method,
+          reference: payment.reference,
+          tendered: payment.method === "cash" ? payment.amount : undefined,
         });
       }
 

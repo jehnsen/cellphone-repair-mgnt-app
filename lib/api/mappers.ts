@@ -1,4 +1,5 @@
 import { money, initialsOf } from "@/lib/format";
+import { toTicketPayment } from "@/lib/api/mappers-commerce";
 import type {
   BranchDto,
   CustomerDeviceDto,
@@ -11,6 +12,7 @@ import type {
   TicketLineDto,
   TicketPhotoDto,
   TicketQuoteDto,
+  PaymentDto,
   UserDto,
 } from "@/lib/api/dto";
 import type {
@@ -181,6 +183,8 @@ export interface TicketExtras {
   lines?: TicketLineDto[];
   photos?: TicketPhotoDto[];
   quotes?: TicketQuoteDto[];
+  /** The ticket own payment ledger, from /tickets/{id}/payments. */
+  payments?: PaymentDto[];
 }
 
 export function toTicket(dto: RepairTicketDto, extras: TicketExtras = {}): Ticket {
@@ -219,18 +223,25 @@ export function toTicket(dto: RepairTicketDto, extras: TicketExtras = {}): Ticke
   const amountPaid = num(dto.downpayment);
   const totalDue = approvedAmount ?? estimatedCost;
 
-  const payments: Payment[] = amountPaid
-    ? [
-        {
-          id: `${dto.ulid}-downpayment`,
-          amount: amountPaid,
-          method: "cash",
-          kind: "downpayment",
-          receivedAt: dto.created_at ?? new Date().toISOString(),
-          receivedBy: "",
-        },
-      ]
-    : [];
+  /* Detail carries the real ledger from /tickets/{id}/payments. The list does
+     not, so there `downpayment` stands in as a single opening payment — the
+     balance is the server's either way. */
+  const payments: Payment[] = extras.payments?.length
+    ? extras.payments.map((payment, index) =>
+        toTicketPayment(payment, index === 0 ? "downpayment" : "balance"),
+      )
+    : amountPaid
+      ? [
+          {
+            id: `${dto.ulid}-downpayment`,
+            amount: amountPaid,
+            method: "cash",
+            kind: "downpayment",
+            receivedAt: dto.created_at ?? new Date().toISOString(),
+            receivedBy: "",
+          },
+        ]
+      : [];
 
   return {
     id: dto.ulid,
