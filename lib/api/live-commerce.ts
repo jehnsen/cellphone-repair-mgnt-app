@@ -427,7 +427,7 @@ export function createCommerceApi(
  * Exported so first load and every later refresh build items the same way.
  */
 export async function loadInventory(client: HttpClient): Promise<InventoryItem[]> {
-  const [products, levels, units] = await Promise.all([
+  const [products, levels, units, movements] = await Promise.all([
     client.getAll<ProductDto>("/products", {
       query: { include: "compatibleDeviceModels" },
     }),
@@ -435,7 +435,22 @@ export async function loadInventory(client: HttpClient): Promise<InventoryItem[]
     client
       .getAll<SerializedUnitDto>("/serialized-units")
       .catch(() => [] as SerializedUnitDto[]),
+    /* The ledger is the only place a product's last movement is recorded —
+       without it the inventory list's "last movement" column is always
+       blank. Cheap for a shop this size; the getAll page cap is the guard. */
+    client
+      .getAll<StockMovementDto>("/inventory/movements")
+      .catch(() => [] as StockMovementDto[]),
   ]);
+
+  const lastMovement = new Map<string, string>();
+  for (const movement of movements) {
+    const ulid = movement.product?.ulid;
+    const at = movement.occurred_at;
+    if (!ulid || !at) continue;
+    const current = lastMovement.get(ulid);
+    if (!current || new Date(at) > new Date(current)) lastMovement.set(ulid, at);
+  }
 
   const onHand = new Map<string, number>();
   for (const level of levels) {
@@ -463,6 +478,8 @@ export async function loadInventory(client: HttpClient): Promise<InventoryItem[]
     } else {
       item.quantityOnHand = onHand.get(dto.ulid) ?? 0;
     }
+
+    item.lastMovementAt = lastMovement.get(dto.ulid);
 
     return item;
   });

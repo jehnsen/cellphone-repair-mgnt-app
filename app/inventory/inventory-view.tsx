@@ -5,6 +5,9 @@ import {
   Boxes,
   ChevronDown,
   ChevronRight,
+  /* Aliased: bare `History` is a DOM global, and TypeScript resolves that
+     instead of the icon, which fails only at the JSX call site. */
+  History as HistoryIcon,
   PackagePlus,
   Plus,
   Search,
@@ -15,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
 import { NewItemDialog } from "@/components/inventory/new-item-dialog";
+import { ItemHistoryDialog } from "@/components/inventory/item-history-dialog";
 import { Panel, PanelScroller } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Input, InputMono } from "@/components/ui/input";
@@ -79,6 +83,7 @@ export function InventoryView() {
 
   const [itemClass, setItemClass] = useState<ItemClass>("handset");
   const [addingItem, setAddingItem] = useState(false);
+  const [viewingHistory, setViewingHistory] = useState<InventoryItem | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "dead">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -150,6 +155,11 @@ export function InventoryView() {
             </Button>
           </>
         }
+      />
+
+      <ItemHistoryDialog
+        item={viewingHistory}
+        onOpenChange={(open) => !open && setViewingHistory(null)}
       />
 
       <NewItemDialog
@@ -306,6 +316,15 @@ export function InventoryView() {
                               onClick={() => setAdjusting(item)}
                             >
                               Adjust
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              title="Movement history"
+                              aria-label={`Movement history for ${item.name}`}
+                              onClick={() => setViewingHistory(item)}
+                            >
+                              <HistoryIcon aria-hidden />
                             </Button>
                           </div>
                         </TableCell>
