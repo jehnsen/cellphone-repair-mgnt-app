@@ -27,7 +27,7 @@ import {
 import { EmptyState } from "@/components/ui/states";
 import { useShop } from "@/lib/shop/store";
 import { itemStock } from "@/lib/shop/queries";
-import { STATUS_META } from "@/lib/status";
+import { STAGE_META, stageOf } from "@/lib/stages";
 import { count, formatDate, manilaDayKey, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Sale } from "@/lib/types";
@@ -248,7 +248,7 @@ grossSales > 0
         <StatTile
           label="Jobs taken in"
           value={count(tickets.length)}
-          hint={`${count(tickets.filter((t) => STATUS_META[t.status].terminal).length)} closed`}
+          hint={`${count(tickets.filter((t) => stageOf(t.status) === "closed").length)} closed`}
         />
         <StatTile
           label="Stock at cost"
@@ -450,7 +450,7 @@ grossSales > 0
                       </TableCell>
                       <TableCell>
                         <Badge variant={critical ? "stamp" : "flag"}>
-                          {STATUS_META[ticket.status].label}
+                          {STAGE_META[stageOf(ticket.status)].label}
                         </Badge>
                       </TableCell>
                       <TableNumeric

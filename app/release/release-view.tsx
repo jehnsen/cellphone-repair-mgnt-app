@@ -23,11 +23,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { TagHead } from "@/components/tag/tag-head";
 import { PrintDocument } from "@/components/print/print-document";
 import { ReleaseSlip } from "@/components/print/release-slip";
-import { StatusChip } from "@/components/tag/status-chip";
+import { StageChip } from "@/components/tag/stage-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
-import { agingOf, STATUS_META } from "@/lib/status";
-import { formatDate, formatMobile, peso } from "@/lib/format";
+import { agingOf } from "@/lib/status";
+import { STAGE_META, stageOf } from "@/lib/stages";
+import { formatDate, formatImei, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod, Ticket } from "@/lib/types";
 
@@ -74,6 +75,9 @@ export function ReleaseView() {
   const [claimant, setClaimant] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentReference, setPaymentReference] = useState("");
+  /* Scanned at the counter before handing the unit over. Defaults to the
+     job order own IMEI so a shop without a scanner can still confirm. */
+  const [scannedImei, setScannedImei] = useState("");
   const [released, setReleased] = useState<Ticket | null>(null);
 
   const release = useMutation((api, args: Parameters<typeof api.releaseTicket>[0]) =>
@@ -127,9 +131,11 @@ export function ReleaseView() {
   );
 
   const aging = ticket ? agingOf(ticket) : null;
-  const statusMeta = ticket ? STATUS_META[ticket.status] : null;
+  const statusMeta = ticket ? STAGE_META[stageOf(ticket.status)] : null;
   const alreadyReleased = ticket?.status === "released";
   const notReady = ticket && !alreadyReleased && ticket.status !== "ready_for_pickup";
+  /* The server balance is the truth: it is total − downpayment − ledger, and
+     it is what the release guard checks. */
   const balance = ticket ? Math.max(0, ticket.balance) : 0;
 
   const canRelease = Boolean(
@@ -143,6 +149,7 @@ export function ReleaseView() {
     setClaimant("");
     setPaymentReference("");
     setPaymentMethod("cash");
+    setScannedImei("");
     /* Drop ?code= too, or the effect above re-fills the box on the next
        render and the counter cannot actually clear the screen. */
     if (codeParam) router.replace("/release");
@@ -151,6 +158,35 @@ export function ReleaseView() {
 
   const submitRelease = async () => {
     if (!ticket) return;
+
+    /* Chain of custody: the server refuses to release a unit without a
+       matching release-phase IMEI scan, so verify before transitioning. The
+       scan is recorded either way — the release guard is what acts on it. */
+    try {
+      const scanned = scannedImei.replace(/\D/g, "") || ticket.device.imei;
+      if (scanned) {
+        const { matches } = await api.verifyImei({
+          ticketId: ticket.id,
+          scannedImei: scanned,
+          phase: "release",
+        });
+        if (!matches) {
+          toast.error("That IMEI does not match this job order.", {
+            description:
+              "Check you have the right unit. An owner can override a scan that will not read.",
+          });
+          return;
+        }
+      }
+    } catch (caught) {
+      const { message, description } = toastError(
+        caught,
+        "Could not verify the unit's IMEI.",
+      );
+      toast.error(message, { description });
+      return;
+    }
+
     const { data: result, error } = await release.mutate({
       ticketId: ticket.id,
       releasedTo: claimant.trim(),
@@ -241,7 +277,7 @@ export function ReleaseView() {
               title={customer?.name ?? "Walk-in"}
               subtitle={`${ticket.device.brand} ${ticket.device.model} · ${ticket.device.color}`}
               meta={[
-                { label: "Status", value: statusMeta?.label ?? "" },
+                { label: "Stage", value: statusMeta?.label ?? "" },
                 { label: "Promised", value: formatDate(ticket.promisedAt) },
                 { label: "Balance", value: peso(ticket.balance) },
               ]}
@@ -356,6 +392,26 @@ export function ReleaseView() {
                         Use {customer.name} ({formatMobile(customer.mobile)})
                       </button>
                     ) : null}
+                  </div>
+
+                  {/* The last check before the unit leaves: the thing in your
+                      hand is the thing on the job order. */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="scanned-imei">Scan the unit</Label>
+                    <InputMono
+                      id="scanned-imei"
+                      value={scannedImei}
+                      onChange={(e) => setScannedImei(e.target.value)}
+                      placeholder={formatImei(ticket.device.imei) || "IMEI or serial"}
+                    />
+                    <p className="text-xs leading-relaxed text-ink-soft">
+                      {scannedImei.replace(/\D/g, "")
+                        ? scannedImei.replace(/\D/g, "") ===
+                          ticket.device.imei.replace(/\D/g, "")
+                          ? "Matches this job order."
+                          : "Does not match — check you have the right unit."
+                        : `Leave blank to confirm ${formatImei(ticket.device.imei)}.`}
+                    </p>
                   </div>
 
                   <div className="border-t border-rule-soft pt-3">

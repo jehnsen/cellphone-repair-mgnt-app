@@ -68,6 +68,9 @@ export function createUnavailableApi(): ShopApi {
     async markReadyForPickup() {
       throw missing("Marking ready for pickup", "POST /tickets/{id}/transition");
     },
+    async verifyImei() {
+      throw missing("Verifying the IMEI", "POST /tickets/{id}/imei-verifications");
+    },
     async releaseTicket() {
       throw missing("Releasing a unit", "POST /tickets/{id}/transition");
     },
@@ -79,6 +82,12 @@ export function createUnavailableApi(): ShopApi {
     },
     async getSuppliers() {
       return [];
+    },
+    async getProductRefs() {
+      return { categories: [], brands: [] };
+    },
+    async createItem() {
+      throw missing("Adding an item", "POST /products");
     },
     async receiveStock() {
       throw missing("Receiving stock", "POST /goods-receipts");
@@ -113,6 +122,10 @@ export function createUnavailableApi(): ShopApi {
 
     /* Still genuinely absent: the ledger only writes on create, update, and
        transition, so a note with no status change has nowhere to go. */
+    async recordPayment() {
+      throw missing("Recording a payment", "POST /tickets/{id}/payments");
+    },
+
     async addNote() {
       throw missing("Adding a standalone note", "ticket note");
     },

@@ -33,10 +33,12 @@ import {
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { TagHead } from "@/components/tag/tag-head";
 import { FindingPanel } from "@/components/ticket/finding-panel";
+import { PaymentDialog } from "@/components/ticket/payment-dialog";
 import { useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
-import { agingOf, nextStatuses, STATUS_META } from "@/lib/status";
-import { formatDate, formatDateTime, formatImei, formatMobile, peso } from "@/lib/format";
+import { agingOf } from "@/lib/status";
+import { moveLabel, STAGE_META, stageActions, stageOf } from "@/lib/stages";
+import { formatDate, formatDateTime, formatImei, formatMobile, money, peso } from "@/lib/format";
 import { PROBLEM_LABEL } from "@/lib/problems";
 import { cn } from "@/lib/utils";
 import type { RepairFinding, TicketStatus } from "@/lib/types";
@@ -87,6 +89,7 @@ export function TicketView({ ticketId }: { ticketId: string }) {
   const [localFinding, setLocalFinding] = useState<RepairFinding | null>(null);
   const finding = localFinding ?? fetchedFinding ?? null;
 
+  const [paying, setPaying] = useState(false);
   const [moveTo, setMoveTo] = useState<TicketStatus | null>(null);
   const [note, setNote] = useState("");
   const [moving, setMoving] = useState(false);
@@ -134,9 +137,15 @@ export function TicketView({ ticketId }: { ticketId: string }) {
   if (!ticket) return null;
 
   const aging = agingOf(ticket);
-  const meta = STATUS_META[ticket.status];
-  const moves = nextStatuses(ticket.status);
-  const releasable = moves.includes("released");
+  /* The server keeps the balance (total − downpayment − payment ledger). */
+  const owed = Math.max(0, ticket.balance);
+  /* The header offers the stage's one next step, not the server's raw list.
+     `released` is excluded from both: it needs a claimant and payment, so it
+     goes through the release screen. */
+  const stage = STAGE_META[stageOf(ticket.status)];
+  const { primary, secondary } = stageActions(ticket);
+  const primaryMove = primary && primary.to !== "released" ? primary : null;
+  const releasable = stageOf(ticket.status) === "ready";
 
   const applyMove = async () => {
     if (!moveTo) return;
@@ -148,7 +157,7 @@ export function TicketView({ ticketId }: { ticketId: string }) {
         actorId: user.id,
         note: note.trim() || undefined,
       });
-      toast.success(`Moved to ${STATUS_META[moveTo].label.toLowerCase()}.`);
+      toast.success(`Moved to ${moveLabel(moveTo).toLowerCase()}.`);
       setMoveTo(null);
       setNote("");
       refetch();
@@ -173,9 +182,9 @@ export function TicketView({ ticketId }: { ticketId: string }) {
           ticket.device.color ? ` · ${ticket.device.color}` : ""
         }`}
         meta={[
-          { label: "Status", value: meta.label },
+          { label: "Stage", value: stage.label },
           { label: "Promised", value: formatDate(ticket.promisedAt) },
-          { label: "Balance", value: peso(ticket.balance) },
+          { label: "Owed", value: peso(owed) },
           {
             label: "Technician",
             value: technician?.name ?? "Unassigned",
@@ -183,22 +192,27 @@ export function TicketView({ ticketId }: { ticketId: string }) {
         ]}
         actions={
           <>
-            {moves.filter((s) => s !== "released").length ? (
+            {secondary.length ? (
               <Select value="" onValueChange={(v) => setMoveTo(v as TicketStatus)}>
                 <SelectTrigger size="sm" className="w-auto min-w-36">
                   <ArrowRightLeft className="size-3.5" aria-hidden />
-                  <SelectValue placeholder="Move to…" />
+                  <SelectValue placeholder="Something else…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {moves
-                    .filter((s) => s !== "released")
-                    .map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {STATUS_META[status].label}
-                      </SelectItem>
-                    ))}
+                  {secondary.map((move) => (
+                    <SelectItem key={move.to} value={move.to}>
+                      {move.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+            ) : null}
+
+            {/* One primary step per stage — the whole point of the fold. */}
+            {primaryMove ? (
+              <Button size="sm" onClick={() => setMoveTo(primaryMove.to)}>
+                <ArrowRightLeft aria-hidden /> {primaryMove.label}
+              </Button>
             ) : null}
 
             {releasable ? (
@@ -208,7 +222,7 @@ export function TicketView({ ticketId }: { ticketId: string }) {
                   router.push(`/release?code=${encodeURIComponent(ticket.ticketNo)}`)
                 }
               >
-                <PackageOpen aria-hidden /> Release
+                <PackageOpen aria-hidden /> Release unit
               </Button>
             ) : null}
           </>
@@ -343,13 +357,28 @@ export function TicketView({ ticketId }: { ticketId: string }) {
               <Row label="Estimate" value={peso(ticket.estimatedCost)} mono />
               <Row label="Total due" value={peso(ticket.totalDue)} mono />
               <Row label="Paid" value={peso(ticket.amountPaid)} mono />
-              <Row
-                label="Balance"
-                value={peso(ticket.balance)}
-                mono
-                alert={ticket.balance > 0}
-              />
+              <Row label="Still owed" value={peso(owed)} mono alert={owed > 0} />
             </dl>
+            <PanelBody className="border-t border-rule">
+              <Button
+                variant={owed > 0 ? "default" : "outline"}
+                size="sm"
+                className="w-full"
+                onClick={() => setPaying(true)}
+              >
+                <Banknote aria-hidden />
+                {owed > 0 ? `Take payment · ${peso(owed)}` : "Record a payment"}
+              </Button>
+              {/* The server keeps its own balance; when it disagrees with the
+                  job's arithmetic, say so rather than quietly trusting one. */}
+              {Math.abs(ticket.balance - owed) > 0.01 ? (
+                <p className="mt-2 text-xs leading-relaxed text-flag-ink">
+                  The server records a balance of {peso(ticket.balance)} on this
+                  job, which does not match {peso(ticket.totalDue)} due less{" "}
+                  {peso(ticket.amountPaid)} paid.
+                </p>
+              ) : null}
+            </PanelBody>
           </Panel>
 
           {customer ? (
@@ -396,6 +425,13 @@ export function TicketView({ ticketId }: { ticketId: string }) {
         </div>
       </div>
 
+      <PaymentDialog
+        ticket={ticket}
+        open={paying}
+        onOpenChange={setPaying}
+        onRecorded={refetch}
+      />
+
       <Dialog
         open={Boolean(moveTo)}
         onOpenChange={(open) => {
@@ -409,7 +445,7 @@ export function TicketView({ ticketId }: { ticketId: string }) {
           <DialogHeader>
             <DialogTitle>
               Move {ticket.ticketNo} to{" "}
-              {moveTo ? STATUS_META[moveTo].label.toLowerCase() : ""}
+              {moveTo ? moveLabel(moveTo).toLowerCase() : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">

@@ -8,6 +8,7 @@ import type {
   HandsetUnitStatus,
   ID,
   InventoryItem,
+  ItemClass,
   MovementReason,
   Payment,
   PaymentMethod,
@@ -94,6 +95,25 @@ export interface NewSaleInput {
   officialReceiptNo?: string;
   note?: string;
   cashierId: ID;
+}
+
+/** A new catalog row. Stock arrives separately, through receiving. */
+export interface NewItemInput {
+  name: string;
+  sku: string;
+  itemClass: ItemClass;
+  categoryId: ID;
+  brandId?: ID;
+  barcode?: string;
+  unitCost: number;
+  sellingPrice: number;
+  reorderPoint: number;
+}
+
+/** The picker lists behind the new-item form. */
+export interface ProductRefs {
+  categories: { id: ID; name: string }[];
+  brands: { id: ID; name: string }[];
 }
 
 export interface ReceiveStockInput {
@@ -232,6 +252,8 @@ export interface ShopApi {
   getItem(id: ID): Promise<InventoryItem>;
   getMovements(itemId?: ID): Promise<StockMovement[]>;
   getSuppliers(): Promise<Supplier[]>;
+  getProductRefs(): Promise<ProductRefs>;
+  createItem(input: NewItemInput): Promise<InventoryItem>;
   receiveStock(input: ReceiveStockInput): Promise<InventoryItem>;
   adjustStock(input: AdjustStockInput): Promise<InventoryItem>;
 
@@ -270,12 +292,30 @@ export interface ShopApi {
     actorId: ID;
   }): Promise<Ticket[]>;
   addNote(input: { ticketId: ID; note: string; actorId: ID }): Promise<TimelineEvent>;
+  /** Money against a repair. A ticket is never wrapped in a sale to collect. */
+  recordPayment(input: {
+    ticketId: ID;
+    amount: number;
+    method: PaymentMethod;
+    reference?: string;
+    tendered?: number;
+    actorId: ID;
+  }): Promise<Ticket>;
 
   /** The structured conclusion. Absent until a technician records one. */
   getFinding(ticketId: ID): Promise<RepairFinding | null>;
   /** Upsert: creates on first save, updates thereafter. */
   saveFinding(input: SaveFindingInput): Promise<RepairFinding>;
   markReadyForPickup(input: { ticketIds: ID[]; actorId: ID }): Promise<Ticket[]>;
+  /** Scan-and-match the unit before it leaves. The server refuses a release
+   *  without a matching release-phase verification (or an owner override). */
+  verifyImei(input: {
+    ticketId: ID;
+    scannedImei: string;
+    phase?: "intake" | "pre_repair" | "post_repair" | "release";
+    overrideReason?: string;
+  }): Promise<{ matches: boolean }>;
+
   releaseTicket(input: {
     ticketId: ID;
     releasedTo: string;

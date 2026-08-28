@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
+import { NewItemDialog } from "@/components/inventory/new-item-dialog";
 import { Panel, PanelScroller } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Input, InputMono } from "@/components/ui/input";
@@ -77,6 +78,7 @@ export function InventoryView() {
   const { db, user } = useShop();
 
   const [itemClass, setItemClass] = useState<ItemClass>("handset");
+  const [addingItem, setAddingItem] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "dead">("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -126,22 +128,35 @@ export function InventoryView() {
         title="Inventory"
         description="Handsets are tracked one IMEI at a time. Accessories and spare parts move by quantity."
         actions={
-          lowCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => setFilter(filter === "low" ? "all" : "low")}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                filter === "low"
-                  ? "border-flag bg-flag-fill text-flag-ink"
-                  : "border-rule bg-copy text-ink-soft hover:bg-secondary",
-              )}
-            >
-              <TriangleAlert className="size-3.5" aria-hidden />
-              {lowCount} low on stock
-            </button>
-          ) : null
+          <>
+            {lowCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setFilter(filter === "low" ? "all" : "low")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                  filter === "low"
+                    ? "border-flag bg-flag-fill text-flag-ink"
+                    : "border-rule bg-copy text-ink-soft hover:bg-secondary",
+                )}
+              >
+                <TriangleAlert className="size-3.5" aria-hidden />
+                {lowCount} low on stock
+              </button>
+            ) : null}
+
+            <Button size="sm" onClick={() => setAddingItem(true)}>
+              <PackagePlus aria-hidden /> New item
+            </Button>
+          </>
         }
+      />
+
+      <NewItemDialog
+        open={addingItem}
+        onOpenChange={setAddingItem}
+        itemClass={itemClass}
+        onCreated={refetch}
       />
 
       <Tabs value={itemClass} onValueChange={(v) => setItemClass(v as ItemClass)}>

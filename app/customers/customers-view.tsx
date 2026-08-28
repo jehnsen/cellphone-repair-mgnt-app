@@ -29,10 +29,10 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/states";
-import { StatusChip } from "@/components/tag/status-chip";
+import { StageChip } from "@/components/tag/stage-chip";
 import { useMutation, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
-import { STATUS_META } from "@/lib/status";
+import { stageOf } from "@/lib/stages";
 import { formatDate, formatImei, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Customer, Sale, Ticket } from "@/lib/types";
@@ -110,7 +110,7 @@ export function CustomersView() {
               <ul className="max-h-[70vh] divide-y divide-rule-soft overflow-y-auto">
                 {results.map((customer) => {
                   const openCount = db.tickets.filter(
-                    (t) => t.customerId === customer.id && !STATUS_META[t.status].terminal,
+                    (t) => t.customerId === customer.id && stageOf(t.status) !== "closed",
                   ).length;
                   return (
                     <li key={customer.id}>
@@ -355,7 +355,7 @@ function CustomerDetail({
                       className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
                     >
                       <span className="mono font-semibold text-ink">{ticket.ticketNo}</span>
-                      <StatusChip status={ticket.status} showLabel={false} />
+                      <StageChip status={ticket.status} showLabel={false} />
                       <span className="min-w-0 flex-1 truncate text-ink-soft">
                         {ticket.reportedProblem}
                       </span>

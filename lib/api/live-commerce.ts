@@ -2,7 +2,9 @@ import { money } from "@/lib/format";
 import { ApiError } from "@/lib/api/errors";
 import type { HttpClient } from "@/lib/api/http";
 import type {
+  DeviceBrandDto,
   PaymentDto,
+  ProductCategoryDto,
   ProductDto,
   SaleDto,
   SerializedUnitDto,
@@ -82,6 +84,46 @@ export function createCommerceApi(
   };
 
   return {
+    /* ── Catalog ───────────────────────────────────────────────────── */
+
+    async getProductRefs() {
+      const [categories, brands] = await Promise.all([
+        client.getAll<ProductCategoryDto>("/product-categories", {
+          query: { "filter[is_active]": "true", sort: "name" },
+        }),
+        client.getAll<DeviceBrandDto>("/device-brands", {
+          query: { "filter[is_active]": "true", sort: "name" },
+        }),
+      ]);
+
+      return {
+        categories: categories.map((row) => ({ id: row.ulid, name: row.name })),
+        brands: brands.map((row) => ({ id: row.ulid, name: row.name })),
+      };
+    },
+
+    async createItem(input) {
+      const { data } = await client.post<ProductDto>("/products", {
+        body: {
+          sku: input.sku.trim(),
+          barcode: input.barcode?.trim() || null,
+          name: input.name.trim(),
+          product_category_ulid: input.categoryId,
+          device_brand_ulid: input.brandId || null,
+          type: input.itemClass === "spare_part" ? "part" : input.itemClass,
+          cost: input.unitCost,
+          selling_price: input.sellingPrice,
+          /* A handset is tracked one IMEI at a time; everything else is a
+             quantity on a shelf. */
+          is_serialized: input.itemClass === "handset",
+          reorder_point: input.reorderPoint,
+          track_inventory: true,
+          is_active: true,
+        },
+      });
+
+      return toInventoryItem(data);
+    },
     /* ── Inventory ─────────────────────────────────────────────────── */
 
     async getItems(query = {}) {
@@ -335,7 +377,17 @@ export function createCommerceApi(
       const rows = await client.getAll<ShiftDto>("/shifts", {
         query: { "filter[is_open]": "true", sort: "-opened_at" },
       });
-      const open = rows.find((shift) => shift.is_open);
+
+      /* The drawer belongs to a cashier, not to the shop: the server records
+         a sale against `findOpenFor($request->user())`. Taking any open shift
+         here let the POS believe a drawer was open when it belonged to
+         somebody else — the cart then failed at checkout with SHIFT_NOT_OPEN,
+         and the day sheet reported another person's cash as on hand. */
+      const me = context.currentUser()?.id;
+      const open = rows.find(
+        (shift) => shift.is_open && (!me || shift.cashier?.ulid === me),
+      );
+
       /* The list omits cash movements; the drawer screen needs them. */
       return open ? loadShift(open.ulid) : null;
     },

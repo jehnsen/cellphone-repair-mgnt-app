@@ -222,8 +222,29 @@ export function toTicket(dto: RepairTicketDto, extras: TicketExtras = {}): Ticke
     dto.approved_amount === null || dto.approved_amount === undefined
       ? undefined
       : num(dto.approved_amount);
-  const amountPaid = num(dto.downpayment);
   const totalDue = approvedAmount ?? estimatedCost;
+
+  /**
+   * What has actually been paid.
+   *
+   * `downpayment` is only the money taken at intake — everything after that
+   * lives in the ticket's payment ledger, which the list endpoint does not
+   * carry. Reading `downpayment` alone reported a fully paid job as unpaid.
+   *
+   * So: sum the ledger when it is loaded (detail), and otherwise derive it
+   * from the server's own `balance`, which is `total − downpayment − paid`.
+   */
+  const serverBalance =
+    dto.balance === null || dto.balance === undefined ? undefined : num(dto.balance);
+  const ledgerPaid = extras.payments?.length
+    ? money(extras.payments.reduce((sum, payment) => sum + num(payment.amount), 0))
+    : 0;
+
+  const amountPaid = extras.payments
+    ? money(num(dto.downpayment) + ledgerPaid)
+    : serverBalance !== undefined
+      ? money(Math.max(0, totalDue - serverBalance))
+      : num(dto.downpayment);
 
   /* Detail carries the real ledger from /tickets/{id}/payments. The list does
      not, so there `downpayment` stands in as a single opening payment — the
@@ -274,7 +295,7 @@ export function toTicket(dto: RepairTicketDto, extras: TicketExtras = {}): Ticke
     partsTotal,
     totalDue,
     amountPaid,
-    balance: num(dto.balance, money(totalDue - amountPaid)),
+    balance: serverBalance ?? money(Math.max(0, totalDue - amountPaid)),
 
     promisedAt: promisedAtFrom(dto.promised_date),
     warrantyDays: dto.warranty_days_offered ?? 0,

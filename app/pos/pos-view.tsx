@@ -24,6 +24,8 @@ import { EmptyState } from "@/components/ui/states";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
+import { PrintDocument } from "@/components/print/print-document";
+import { SaleReceipt } from "@/components/print/sale-receipt";
 import { itemStock } from "@/lib/shop/queries";
 import { computeTax } from "@/lib/vat";
 import { peso } from "@/lib/format";
@@ -66,6 +68,8 @@ export function PosView() {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [tendered, setTendered] = useState("");
   const [reference, setReference] = useState("");
+  /* 58mm and 80mm are the two rolls PH counter printers use. */
+  const [rollWidth, setRollWidth] = useState<58 | 80>(80);
   const [completed, setCompleted] = useState<Sale | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [startingCash, setStartingCash] = useState("3000");
@@ -151,8 +155,12 @@ export function PosView() {
         return [
           ...prev,
           {
+            /* Anything that is not a serialized handset is still a *product*
+               line — a spare part sold over the counter is stock leaving the
+               shelf, not labour. Calling it a service sent the product's ULID
+               as `service_ulid` and the server rejected it as invalid. */
             key: item.id,
-            kind: item.itemClass === "accessory" ? "accessory" : "service",
+            kind: "accessory",
             itemId: item.id,
             sku: item.sku,
             name: item.name,
@@ -177,6 +185,9 @@ export function PosView() {
       {
         key: `svc-${Date.now()}`,
         kind: "service",
+        /* The service's own ULID: this is the only kind of line the server
+           accepts as `service_ulid`, and without it the sale cannot be sent. */
+        itemId: service.id,
         sku: service.code,
         name: service.name,
         quantity: 1,
@@ -282,6 +293,13 @@ export function PosView() {
     } else if (error) {
       const { message, description } = toastError(error, "Could not complete the sale.");
       toast.error(message, { description });
+
+      /* The drawer can close under us — another device, or a shift that was
+         never ours. Re-read it so the screen shows the open-shift prompt
+         instead of a cart that cannot be charged. The cart is kept. */
+      if ((error as { code?: string }).code === "SHIFT_NOT_OPEN") {
+        refetchShift();
+      }
     }
   };
 
@@ -658,7 +676,27 @@ export function PosView() {
                 ) : null}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <span className="label-pad">Roll</span>
+                  {([58, 80] as const).map((width) => (
+                    <button
+                      key={width}
+                      type="button"
+                      onClick={() => setRollWidth(width)}
+                      aria-pressed={rollWidth === width}
+                      className={cn(
+                        "mono rounded-md border px-2 py-1 text-xs transition-colors",
+                        rollWidth === width
+                          ? "border-bench bg-bench-fill font-semibold text-bench-ink"
+                          : "border-rule bg-paper text-ink-soft hover:bg-secondary",
+                      )}
+                    >
+                      {width}mm
+                    </button>
+                  ))}
+                </div>
+
                 <Button variant="outline" onClick={() => window.print()}>
                   <Printer aria-hidden /> Print receipt
                 </Button>
@@ -670,6 +708,21 @@ export function PosView() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Mounted only while the dialog is up. `window.print()` prints the whole
+          document, so the receipt has to exist as a document of its own —
+          without this the printer spooled the dimmed screen and the dialog. */}
+      {completed ? (
+        <PrintDocument>
+          <SaleReceipt
+            sale={completed}
+            shop={db.shop}
+            cashier={user}
+            customer={db.customers.find((c) => c.id === completed.customerId)}
+            width={rollWidth}
+          />
+        </PrintDocument>
+      ) : null}
     </div>
   );
 }

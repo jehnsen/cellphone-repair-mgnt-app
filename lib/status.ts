@@ -190,12 +190,44 @@ export interface Aging {
   srLabel: string;
 }
 
+/** Days on the shelf before an uncollected unit is a real problem. */
+const PICKUP_CHASE_DAYS = 7;
+const PICKUP_ABANDONED_DAYS = 30;
+
 export function agingOf(ticket: Ticket, now: Date = new Date()): Aging {
   const dwellHours = hoursBetween(ticket.statusChangedAt, now);
   const meta = STATUS_META[ticket.status];
   const stalled = dwellHours > meta.dwellLimitHours;
   const daysToPromise = daysBetween(now, ticket.promisedAt);
   const daysLate = -daysToPromise;
+
+  /* Once the unit is fixed, the promised date is the wrong clock. The repair
+     is not late — the *pickup* is, and that is the customer's clock, not the
+     shop's. Measuring against the promise here paints a finished job in
+     overdue red for work nobody still owes, so waiting units are measured by
+     days on the shelf instead, and only turn red near the unclaimed policy. */
+  if (ticket.status === "ready_for_pickup" || ticket.status === "unclaimed") {
+    const daysWaiting = dwellHours / 24;
+    const tier: AgingTier =
+      daysWaiting >= PICKUP_ABANDONED_DAYS
+        ? "overdue"
+        : daysWaiting >= PICKUP_CHASE_DAYS
+          ? "soon"
+          : "fresh";
+
+    return {
+      tier,
+      daysLate,
+      dwellHours,
+      stalled: daysWaiting >= PICKUP_CHASE_DAYS,
+      srLabel:
+        tier === "overdue"
+          ? `Uncollected for ${Math.round(daysWaiting)} days — past the unclaimed policy`
+          : tier === "soon"
+            ? `Waiting ${Math.round(daysWaiting)} days for pickup`
+            : "Ready, waiting for pickup",
+    };
+  }
 
   if (meta.terminal) {
     return {

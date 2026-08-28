@@ -35,10 +35,20 @@ import {
 } from "@/components/ui/table";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { AgingStrip } from "@/components/tag/aging-strip";
-import { StatusChip } from "@/components/tag/status-chip";
+import { StageChip } from "@/components/tag/stage-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
-import { agingOf, BOARD_STATUSES, nextStatuses, STATUS_META } from "@/lib/status";
+import { agingOf, nextStatuses } from "@/lib/status";
+import type { Stage } from "@/lib/stages";
+import {
+  agingLabel,
+  BOARD_MOVES,
+  BOARD_STAGES,
+  canReach,
+  moveLabel,
+  STAGE_META,
+  stageOf,
+} from "@/lib/stages";
 import { dueLabel, shortAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,19 +60,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Ticket, TicketStatus } from "@/lib/types";
-
-/* Moves the generic mover offers, in board order. Release and ready-for-pickup
-   are excluded: they have dedicated buttons because each needs more than a
-   status change (a claimant and payment; a pickup notice). */
-const BOARD_MOVES: TicketStatus[] = [
-  "diagnosed",
-  "awaiting_approval",
-  "awaiting_parts",
-  "in_repair",
-  "qc",
-  "unrepairable",
-  "returned_as_is",
-];
 
 export function BoardView() {
   const router = useRouter();
@@ -120,11 +117,13 @@ export function BoardView() {
     });
   }, [tickets, brand, overdueOnly, search, db.customers]);
 
+  /* Columns are stages, not statuses: one person does not think in eleven
+     states. lib/stages.ts holds which statuses fold into which column. */
   const byColumn = useMemo(() => {
     const map = new Map<string, Ticket[]>();
-    BOARD_STATUSES.forEach((status) => map.set(status, []));
+    BOARD_STAGES.forEach((stage) => map.set(stage, []));
     filtered.forEach((ticket) => {
-      map.get(ticket.status)?.push(ticket);
+      map.get(stageOf(ticket.status))?.push(ticket);
     });
     return map;
   }, [filtered]);
@@ -143,7 +142,9 @@ export function BoardView() {
   const selectedTickets = filtered.filter((t) => selected.has(t.id));
   const canMarkReady =
     selectedTickets.length > 0 &&
-    selectedTickets.every((t) => nextStatuses(t.status).includes("ready_for_pickup"));
+    /* Only from the bench onwards. Reachability alone would offer this on a
+       just-received unit, silently skipping diagnosis and the repair itself. */
+    selectedTickets.every((t) => stageOf(t.status) === "in_repair");
 
   /* Only moves legal for EVERY selected ticket are offered, so a mixed
      selection can never half-apply. Release and pickup have their own
@@ -151,14 +152,17 @@ export function BoardView() {
      in the generic mover. */
   const commonMoves = useMemo<TicketStatus[]>(() => {
     if (!selectedTickets.length) return [];
-    const sets = selectedTickets.map((t) => new Set(nextStatuses(t.status)));
-    return BOARD_MOVES.filter((status) => sets.every((set) => set.has(status)));
+    /* Reachable, not just directly legal: the client walks the server's hops,
+       so "in repair" is offered from "to check" even though that is two moves. */
+    return BOARD_MOVES.filter((move) =>
+      selectedTickets.every((ticket) => canReach(ticket.status, move.to)),
+    ).map((move) => move.to);
   }, [selectedTickets]);
 
   const applyMove = async () => {
     if (!moveTo || !selectedTickets.length) return;
     setMoving(true);
-    const label = STATUS_META[moveTo].label.toLowerCase();
+    const label = moveLabel(moveTo).toLowerCase();
     let done = 0;
     try {
       for (const ticket of selectedTickets) {
@@ -176,6 +180,68 @@ export function BoardView() {
       clearSelection();
     } catch (caught) {
       /* Some may already have moved — say so rather than implying none did. */
+      const { message, description } = toastError(caught, "Could not move the ticket.");
+      toast.error(message, {
+        description: done
+          ? `${done} moved before this failed. ${description ?? ""}`.trim()
+          : description,
+      });
+    } finally {
+      setMoving(false);
+      refetch();
+    }
+  };
+
+  /* ── Drag and drop ───────────────────────────────────────────────────
+     Dragging a card to a column is the same move as picking it from the
+     mover — it just skips the ticking. The checkboxes stay: drag is a
+     pointer gesture, and keyboard and touch still need the old path.
+
+     Dragging a card that is part of a selection carries the whole
+     selection, so "tick three, drag one" moves all three. */
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropStage, setDropStage] = useState<Stage | null>(null);
+
+  const draggedTickets = (id: string): Ticket[] => {
+    if (selected.has(id) && selectedTickets.length > 1) return selectedTickets;
+    const one = filtered.find((ticket) => ticket.id === id);
+    return one ? [one] : [];
+  };
+
+  /** A drop is legal only if every carried ticket can reach that stage. */
+  const canDropOn = (stage: Stage, id: string | null): boolean => {
+    if (!id) return false;
+    const carried = draggedTickets(id);
+    if (!carried.length) return false;
+    const target = STAGE_META[stage].entry;
+    return carried.every(
+      (ticket) => stageOf(ticket.status) !== stage && canReach(ticket.status, target),
+    );
+  };
+
+  const dropOn = async (stage: Stage, id: string) => {
+    const carried = draggedTickets(id);
+    const target = STAGE_META[stage].entry;
+    setDraggingId(null);
+    setDropStage(null);
+    if (!carried.length) return;
+
+    setMoving(true);
+    let done = 0;
+    try {
+      for (const ticket of carried) {
+        await api.setTicketStatus({
+          ticketId: ticket.id,
+          status: target,
+          actorId: user.id,
+        });
+        done += 1;
+      }
+      toast.success(
+        `Moved ${done} ticket${done === 1 ? "" : "s"} to ${STAGE_META[stage].label.toLowerCase()}.`,
+      );
+      clearSelection();
+    } catch (caught) {
       const { message, description } = toastError(caught, "Could not move the ticket.");
       toast.error(message, {
         description: done
@@ -297,7 +363,7 @@ export function BoardView() {
               <SelectContent>
                 {commonMoves.map((status) => (
                   <SelectItem key={status} value={status}>
-                    {STATUS_META[status].label}
+                    {moveLabel(status)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -314,7 +380,7 @@ export function BoardView() {
                 const ids = Array.from(selected);
                 markReady.mutate(ids).then(({ data: result, error }) => {
                   if (result) {
-                    toast.success(`Marked ${result.length} ticket${result.length === 1 ? "" : "s"} ready for pickup.`);
+                    toast.success(`Moved ${result.length} ticket${result.length === 1 ? "" : "s"} to ready to claim.`);
                     clearSelection();
                   } else if (error) {
                     const { message, description } = toastError(
@@ -326,7 +392,7 @@ export function BoardView() {
                 });
               }}
             >
-              <PackageCheck aria-hidden /> Mark ready for pickup
+              <PackageCheck aria-hidden /> Tested — ready to claim
             </Button>
           ) : null}
 
@@ -375,21 +441,58 @@ export function BoardView() {
           ) : (
             <PanelScroller>
               <div className="flex gap-3 pb-2">
-                {BOARD_STATUSES.map((status) => {
-                  const meta = STATUS_META[status];
-                  const columnTickets = byColumn.get(status) ?? [];
+                {BOARD_STAGES.map((stage) => {
+                  const meta = STAGE_META[stage];
+                  const columnTickets = byColumn.get(stage) ?? [];
+                  const droppable = canDropOn(stage, draggingId);
+                  const isTarget = dropStage === stage && droppable;
+
                   return (
-                    <div key={status} className="w-72 shrink-0 sm:w-80">
-                      <div className="flex items-center gap-2 px-1 pb-2">
-                        <span className="label-bin text-ink">{meta.label}</span>
-                        <span className="mono text-xs text-ink-faint">
-                          {columnTickets.length}
-                        </span>
+                    <div
+                      key={stage}
+                      className="w-72 shrink-0 sm:w-80"
+                      onDragOver={(event) => {
+                        /* Only calling preventDefault marks this a valid drop
+                           target, so an illegal move refuses the cursor. */
+                        if (!droppable) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        setDropStage(stage);
+                      }}
+                      onDragLeave={(event) => {
+                        if (event.currentTarget.contains(event.relatedTarget as Node)) {
+                          return;
+                        }
+                        setDropStage((current) => (current === stage ? null : current));
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const id =
+                          event.dataTransfer.getData("text/plain") || draggingId;
+                        if (id && canDropOn(stage, id)) void dropOn(stage, id);
+                      }}
+                    >
+                      <div className="px-1 pb-2">
+                        <div className="flex items-baseline gap-2">
+                          <span className="label-bin truncate text-ink">{meta.label}</span>
+                          <span className="mono text-xs text-ink-faint">
+                            {columnTickets.length}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate text-[0.6875rem] leading-tight text-ink-faint">
+                          {meta.hint}
+                        </p>
                       </div>
-                      <div className="space-y-2">
+                      <div
+                        className={cn(
+                          "space-y-2 rounded-lg border border-transparent p-1 transition-colors",
+                          isTarget && "border-dashed border-bench bg-bench-fill",
+                          draggingId && !droppable && "opacity-45",
+                        )}
+                      >
                         {columnTickets.length === 0 ? (
                           <div className="rounded-lg border border-dashed border-rule-soft px-3 py-6 text-center text-xs text-ink-faint">
-                            Empty
+                            {isTarget ? "Drop to move here" : "Empty"}
                           </div>
                         ) : (
                           columnTickets.map((ticket) => (
@@ -398,6 +501,17 @@ export function BoardView() {
                               ticket={ticket}
                               selected={selected.has(ticket.id)}
                               onToggle={() => toggleSelected(ticket.id)}
+                              dragging={draggingId === ticket.id}
+                              disabled={moving}
+                              onDragStart={(event) => {
+                                event.dataTransfer.setData("text/plain", ticket.id);
+                                event.dataTransfer.effectAllowed = "move";
+                                setDraggingId(ticket.id);
+                              }}
+                              onDragEnd={() => {
+                                setDraggingId(null);
+                                setDropStage(null);
+                              }}
                             />
                           ))
                         )}
@@ -440,7 +554,7 @@ export function BoardView() {
                         />
                       </TableHead>
                       <TableHead>Ticket</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Stage</TableHead>
                       <TableHead>Customer / device</TableHead>
                       <TableHead>Due</TableHead>
                       <TableHead>In status</TableHead>
@@ -471,7 +585,7 @@ export function BoardView() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <StatusChip status={ticket.status} showLabel={false} />
+                            <StageChip status={ticket.status} />
                           </TableCell>
                           <TableCell>
                             <p className="truncate text-ink">{customer?.name ?? "Walk-in"}</p>
@@ -481,7 +595,7 @@ export function BoardView() {
                           </TableCell>
                           <TableCell>
                             <span className={cn("mono text-xs font-semibold", aging.tier === "overdue" ? "text-stamp-ink" : "text-ink-soft")}>
-                              {dueLabel(ticket.promisedAt)}
+                              {agingLabel(ticket)}
                             </span>
                           </TableCell>
                           <TableCell className="mono text-xs text-ink-faint">
@@ -515,7 +629,7 @@ export function BoardView() {
             <DialogTitle>
               Move {selectedTickets.length} ticket
               {selectedTickets.length === 1 ? "" : "s"} to{" "}
-              {moveTo ? STATUS_META[moveTo].label.toLowerCase() : ""}
+              {moveTo ? moveLabel(moveTo).toLowerCase() : ""}
             </DialogTitle>
           </DialogHeader>
 
@@ -531,7 +645,6 @@ export function BoardView() {
                     <span className="mono font-semibold text-ink">
                       {ticket.ticketNo}
                     </span>
-                    <StatusChip status={ticket.status} showLabel={false} />
                     <span className="truncate text-ink-soft">
                       {customer?.name ?? "Walk-in"}
                     </span>
@@ -581,10 +694,18 @@ function BoardCard({
   ticket,
   selected,
   onToggle,
+  dragging,
+  disabled,
+  onDragStart,
+  onDragEnd,
 }: {
   ticket: Ticket;
   selected: boolean;
   onToggle: () => void;
+  dragging?: boolean;
+  disabled?: boolean;
+  onDragStart?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
 }) {
   const { db } = useShop();
   const aging = agingOf(ticket);
@@ -592,9 +713,17 @@ function BoardCard({
 
   return (
     <div
+      draggable={!disabled}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      /* The whole card drags; the checkbox and the link inside still take
+         their own clicks, because a drag only starts once the pointer moves. */
       className={cn(
         "flex items-stretch overflow-hidden rounded-lg border bg-copy shadow-raised transition-colors",
         selected ? "border-bench ring-1 ring-bench" : "border-rule",
+        !disabled && "cursor-grab active:cursor-grabbing",
+        dragging && "opacity-50",
+        disabled && "pointer-events-none opacity-60",
       )}
     >
       <AgingStrip aging={aging} />
@@ -631,7 +760,7 @@ function BoardCard({
                   aging.tier === "overdue" ? "text-stamp-ink" : "text-ink-soft",
                 )}
               >
-                {dueLabel(ticket.promisedAt)}
+                {agingLabel(ticket)}
               </span>
             </div>
           </div>

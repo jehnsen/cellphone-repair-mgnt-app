@@ -14,6 +14,10 @@ export type ApiErrorCode =
   | "IDEMPOTENCY_CONFLICT"
   | "VALIDATION_FAILED"
   | "INVALID_STATUS_TRANSITION"
+  | "PAYMENT_SUM_MISMATCH"
+  | "IMEI_MISMATCH"
+  | "SHIFT_NOT_OPEN"
+  | "INSUFFICIENT_STOCK"
   | "RATE_LIMITED"
   | "INTERNAL_ERROR"
   | "SERVICE_UNAVAILABLE"
@@ -76,7 +80,7 @@ export class ApiError extends Error {
   /** "imei: The imei must be valid." — for a toast, when there is no field to pin it to. */
   get fieldSummary(): string {
     return Object.entries(this.fieldErrors)
-      .map(([field, message]) => `${field.replace(/_/g, " ")}: ${message}`)
+      .map(([field, message]) => `${humaniseField(field)}: ${humaniseMessage(message)}`)
       .join("\n");
   }
 }
@@ -134,4 +138,38 @@ export function hintForCode(code: ApiErrorCode, status: number): string {
         ? "The server failed on its side. Nothing was saved — try again."
         : "Try again. If it keeps failing, reload the page.";
   }
+}
+
+/**
+ * `lines.0.service_ulid` is a field path, not something to show a cashier.
+ *
+ * Validation errors surface at the counter mid-sale, so the field is turned
+ * into the thing on screen — "Line 1 service" — and the server's echo of the
+ * raw path inside its own message is stripped out with it.
+ */
+function humaniseField(field: string): string {
+  const line = field.match(/^lines\.(\d+)\.(.+)$/);
+  if (line) {
+    return `Line ${Number(line[1]) + 1} ${labelFor(line[2]!)}`;
+  }
+  return capitalise(labelFor(field));
+}
+
+function labelFor(field: string): string {
+  return field
+    /* Every foreign key on the wire is a ULID; the customer never sees that. */
+    .replace(/_ulids?$/, "")
+    .replace(/_/g, " ")
+    .trim();
+}
+
+function humaniseMessage(message: string): string {
+  /* Laravel echoes the field path into the sentence ("The selected
+     lines.0.service_ulid is invalid."), which reads as noise once the field
+     is already named beside it. */
+  return message.replace(/\b(lines\.\d+\.)?[a-z_]+_ulids?\b/g, "value");
+}
+
+function capitalise(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

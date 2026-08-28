@@ -29,9 +29,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
-import { StatusChip } from "@/components/tag/status-chip";
+import { StageChip } from "@/components/tag/stage-chip";
 import { useQuery, useShop } from "@/lib/shop/store";
-import { agingOf, BOARD_STATUSES, STATUS_META } from "@/lib/status";
+import { agingOf } from "@/lib/status";
+import { agingLabel, BOARD_STAGES, STAGE_META, stageOf } from "@/lib/stages";
 import { count, dueLabel, formatTime, peso, shortAge } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Ticket } from "@/lib/types";
@@ -50,7 +51,7 @@ export function DaySheetView() {
 
   const now = new Date();
   const open = useMemo(
-    () => (tickets ?? []).filter((t) => !STATUS_META[t.status].terminal),
+    () => (tickets ?? []).filter((t) => stageOf(t.status) !== "closed"),
     [tickets],
   );
 
@@ -384,16 +385,16 @@ export function DaySheetView() {
               </span>
             </PanelHeader>
             <ul className="divide-y divide-rule-soft">
-              {BOARD_STATUSES.map((status) => {
-                const meta = STATUS_META[status];
-                const n = open.filter((t) => t.status === status).length;
+              {BOARD_STAGES.map((stage) => {
+                const meta = STAGE_META[stage];
+                const n = open.filter((t) => stageOf(t.status) === stage).length;
                 const share = open.length > 0 ? n / open.length : 0;
                 return (
                   <li
-                    key={status}
+                    key={stage}
                     className="flex items-center gap-3 px-3 py-1.5 sm:px-4"
                   >
-                    <span className="w-28 shrink-0 truncate text-xs text-ink-soft">
+                    <span className="w-36 shrink-0 truncate text-xs text-ink-soft">
                       {meta.label}
                     </span>
                     {/* Fixed-width track so every bar shares one scale. */}
@@ -525,7 +526,7 @@ function TicketRow({
             <span className="mono text-xs font-semibold text-ink">
               {ticket.ticketNo}
             </span>
-            <StatusChip status={ticket.status} showLabel={false} />
+            <StageChip status={ticket.status} showLabel={false} />
             {aging.stalled ? (
               <span className="label-pad text-[0.5625rem] text-flag-ink">
                 stalled
@@ -544,7 +545,7 @@ function TicketRow({
               aging.tier === "overdue" ? "text-stamp-ink" : "text-ink-soft",
             )}
           >
-            {dueLabel(ticket.promisedAt)}
+            {agingLabel(ticket)}
           </p>
           <p className="mono text-[0.6875rem] text-ink-faint">
             {showQuote && ticket.quoteSentAt

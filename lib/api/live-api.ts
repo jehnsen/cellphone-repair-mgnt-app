@@ -1,4 +1,5 @@
 import { agingOf, STATUS_META } from "@/lib/status";
+import { transitionPath } from "@/lib/stages";
 import { money } from "@/lib/format";
 import { ApiError } from "@/lib/api/errors";
 import type { HttpClient } from "@/lib/api/http";
@@ -26,6 +27,7 @@ import {
   toCustomer,
   toInventoryItem,
   toTicket,
+  toTicketStatus,
   toTimelineEvent,
   toUser,
   toRepairFinding,
@@ -384,11 +386,30 @@ export function createLiveApi(
     },
 
     async setTicketStatus({ ticketId, status, note }) {
-      const { data } = await client.post<RepairTicketDto>(
-        `/tickets/${ticketId}/transition`,
-        { body: { to_status: status, note: note?.trim() || null } },
-      );
-      return toTicket(data);
+      /* The board speaks in stages, the server in statuses, and one stage move
+         can be two hops (in repair → QC → ready). Walk the legal path so a
+         single click never trips 409 INVALID_STATUS_TRANSITION. The note is
+         attached to the hop the user actually asked for — the last one. */
+      const current = await client.get<RepairTicketDto>(`/tickets/${ticketId}`);
+      const path = transitionPath(toTicketStatus(current.data.status), status);
+      const hops = path.length ? path : [status];
+
+      let latest = current.data;
+      for (const [index, hop] of hops.entries()) {
+        const isLast = index === hops.length - 1;
+        const { data } = await client.post<RepairTicketDto>(
+          `/tickets/${ticketId}/transition`,
+          {
+            body: {
+              to_status: hop,
+              note: isLast ? (note?.trim() || null) : null,
+            },
+          },
+        );
+        latest = data;
+      }
+
+      return toTicket(latest);
     },
 
     async assignTechnician({ ticketIds, technicianId }) {
@@ -414,6 +435,26 @@ export function createLiveApi(
       return updated;
     },
 
+    async verifyImei({ ticketId, scannedImei, phase = "release", overrideReason }) {
+      const clean = scannedImei.replace(/D/g, "");
+      /* An override is a separate, logged endpoint — owner only — for a unit
+         whose IMEI cannot be read or was mistyped at intake. */
+      const path = overrideReason
+        ? `/tickets/${ticketId}/imei-verifications/override`
+        : `/tickets/${ticketId}/imei-verifications`;
+
+      const { data } = await client.post<{ matches_expected?: boolean }>(path, {
+        body: {
+          phase,
+          scanned_imei: clean,
+          ...(overrideReason ? { override_reason: overrideReason } : {}),
+        },
+      });
+
+      /* A mismatch is recorded, not rejected: the scan happened either way,
+         and it is the release guard that acts on the result. */
+      return { matches: Boolean(data?.matches_expected) || Boolean(overrideReason) };
+    },
     async releaseTicket({ ticketId, releasedTo, payment }) {
       /* Settle the balance first — the server refuses to release a ticket that
          still owes money, and refuses edits once it is released. This posts a
@@ -439,6 +480,19 @@ export function createLiveApi(
 
       const ticket = toTicket(data, await loadTicketExtras(ticketId));
       return { ...ticket, releasedTo };
+    },
+
+    async recordPayment({ ticketId, amount, method, reference, tendered }) {
+      await recordTicketPayment(client, ticketId, {
+        amount,
+        method,
+        reference,
+        /* Cash needs what was handed over so the server can compute change. */
+        tendered: method === "cash" ? (tendered ?? amount) : undefined,
+      });
+
+      const { data } = await client.get<RepairTicketDto>(`/tickets/${ticketId}`);
+      return toTicket(data, await loadTicketExtras(ticketId));
     },
 
     async addNote() {
