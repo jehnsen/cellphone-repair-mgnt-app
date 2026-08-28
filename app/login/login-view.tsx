@@ -125,8 +125,7 @@ export function LoginView() {
           <h2
             className="font-display text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-white xl:text-5xl"
           >
-            Iterable & Insphire Adapter Integration
-            {/* Nelson Cellphone & Computer Repair Shop */}
+            Nelson Cellphone & Computer Repair Shop
           </h2>
           {/* <p className="mt-4 text-sm leading-relaxed text-white/70">
             Intake, the repair board, release, stock, and the drawer — one

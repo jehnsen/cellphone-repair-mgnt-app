@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -39,10 +40,28 @@ import type { Customer, Sale, Ticket } from "@/lib/types";
 
 export function CustomersView() {
   const { db } = useShop();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [creating, setCreating] = useState(false);
+
+  /* Selection is carried in the URL (`/customers?c=<id>`) so "View history"
+     from a ticket lands on the right person and the choice survives a reload
+     or a shared link. */
+  const selectedId = searchParams.get("c");
+  const setSelectedId = useCallback(
+    (id: string | null) => {
+      const next = new URLSearchParams(searchParams);
+      if (id) next.set("c", id);
+      else next.delete("c");
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   /** Search reaches into tickets so an IMEI finds its owner. */
   const results = useMemo(() => {

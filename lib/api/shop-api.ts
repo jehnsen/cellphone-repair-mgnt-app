@@ -162,6 +162,15 @@ function wrap(
       if (method === "getTicket" && result) {
         deps.dispatchQuiet({ type: "upsertTicket", ticket: result as Ticket });
       }
+      /* Customers render straight off `db.customers` (no `useQuery`), so a
+         create/update has to land in the cache itself — a version bump alone
+         refetches nothing here. */
+      if (
+        (method === "createCustomer" || method === "updateCustomer") &&
+        result
+      ) {
+        deps.dispatchQuiet({ type: "upsertCustomer", customer: result as Customer });
+      }
       if (MUTATIONS.has(method)) {
         deps.dispatch({ type: "touch" });
       }

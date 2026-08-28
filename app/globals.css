@@ -42,6 +42,22 @@
   --age-today: var(--flag);
   --age-over: var(--stamp);
 
+  /* --- board-column wayfinding accents ---
+     A muted hue per board stage, used only on the column HEADER (a left rule
+     plus a faint header tint). Cards stay uncoloured so the overdue-red edge
+     is never in competition. `-fill` is a wash a header block can sit on;
+     the base is edge-only. Red is intentionally absent — it means overdue. */
+  --stage-check: #64748b;
+  --stage-check-fill: #f1f3f6;
+  --stage-wait-customer: #7c5cd6;
+  --stage-wait-customer-fill: #f2eefc;
+  --stage-wait-parts: var(--flag);
+  --stage-wait-parts-fill: var(--flag-fill);
+  --stage-repair: var(--bench);
+  --stage-repair-fill: var(--bench-fill);
+  --stage-ready: #0d9488;
+  --stage-ready-fill: #e2f4f1;
+
   /* --- chart ramp: ink first, one accent --- */
   --chart-1: var(--bench);
   --chart-2: var(--ink);
@@ -110,6 +126,19 @@
   --flag: #f0a63a;
   --flag-ink: #fbbf5c;
   --flag-fill: #3a2712;
+
+  /* Board-column accents, dark: same hues, lifted for contrast on --copy;
+     fills are deep washes, not bright panels. */
+  --stage-check: #8a95a8;
+  --stage-check-fill: #1b2230;
+  --stage-wait-customer: #a48ae6;
+  --stage-wait-customer-fill: #241d38;
+  --stage-wait-parts: var(--flag);
+  --stage-wait-parts-fill: var(--flag-fill);
+  --stage-repair: var(--bench);
+  --stage-repair-fill: var(--bench-fill);
+  --stage-ready: #2dd4bf;
+  --stage-ready-fill: #10312d;
 
   --chart-1: var(--bench);
   --chart-2: #e7ebf3;
@@ -199,6 +228,17 @@
   --color-series-handset: var(--series-handset);
   --color-series-accessory: var(--series-accessory);
   --color-grid: var(--grid);
+
+  --color-stage-check: var(--stage-check);
+  --color-stage-check-fill: var(--stage-check-fill);
+  --color-stage-wait-customer: var(--stage-wait-customer);
+  --color-stage-wait-customer-fill: var(--stage-wait-customer-fill);
+  --color-stage-wait-parts: var(--stage-wait-parts);
+  --color-stage-wait-parts-fill: var(--stage-wait-parts-fill);
+  --color-stage-repair: var(--stage-repair);
+  --color-stage-repair-fill: var(--stage-repair-fill);
+  --color-stage-ready: var(--stage-ready);
+  --color-stage-ready-fill: var(--stage-ready-fill);
 
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
@@ -398,9 +438,24 @@
     color: #000;
   }
 
+  /* Page geometry. A `@page` *size* is only honoured from a stylesheet
+     present at parse time (not one injected later), so both live here.
+
+     Default — full sheet — for the claim stub and release slip.
+     Named `receipt` — an 80mm thermal roll — claimed by `.receipt` below.
+     58mm rolls exist too; a 58mm printer just leaves more right margin,
+     because `.receipt` itself is width-capped to its text box and never
+     spills. */
   @page {
     size: auto;
     margin: 12mm;
+  }
+  @page receipt {
+    size: 80mm auto;
+    margin: 3mm 4mm;
+  }
+  .receipt {
+    page: receipt;
   }
 
   html,

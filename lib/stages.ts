@@ -47,6 +47,12 @@ export interface StageMeta {
   order: number;
   onBoard: boolean;
   fill: "outline" | "tint" | "solid";
+  /**
+   * Column wayfinding hue, keyed to the `--stage-*` tokens. Used only on the
+   * column header (a left rule + faint header tint) — never on the cards,
+   * where a red edge already means overdue. `null` for off-board stages.
+   */
+  accent: "check" | "wait-customer" | "wait-parts" | "repair" | "ready" | null;
   /** Server statuses that live in this stage. */
   statuses: TicketStatus[];
   /** Where a card dropped on this column lands. */
@@ -68,6 +74,7 @@ export const STAGE_META: Record<Stage, StageMeta> = {
     order: 1,
     onBoard: true,
     fill: "outline",
+    accent: "check",
     statuses: ["received"],
     entry: "received",
     dwellLimitHours: 8,
@@ -85,6 +92,7 @@ export const STAGE_META: Record<Stage, StageMeta> = {
     order: 2,
     onBoard: true,
     fill: "tint",
+    accent: "wait-customer",
     statuses: ["diagnosed", "awaiting_approval"],
     entry: "awaiting_approval",
     dwellLimitHours: 24,
@@ -102,6 +110,7 @@ export const STAGE_META: Record<Stage, StageMeta> = {
     order: 3,
     onBoard: true,
     fill: "tint",
+    accent: "wait-parts",
     statuses: ["awaiting_parts"],
     entry: "awaiting_parts",
     dwellLimitHours: 72,
@@ -116,6 +125,7 @@ export const STAGE_META: Record<Stage, StageMeta> = {
     order: 4,
     onBoard: true,
     fill: "solid",
+    accent: "repair",
     /* QC folded in: testing is the last step of the repair, not a queue. */
     statuses: ["in_repair", "qc"],
     entry: "in_repair",
@@ -134,6 +144,7 @@ export const STAGE_META: Record<Stage, StageMeta> = {
     order: 5,
     onBoard: true,
     fill: "solid",
+    accent: "ready",
     /* Unclaimed sits here too: it is the same shelf, just older. */
     statuses: ["ready_for_pickup", "unclaimed"],
     entry: "ready_for_pickup",
@@ -148,6 +159,7 @@ export const STAGE_META: Record<Stage, StageMeta> = {
     order: 6,
     onBoard: false,
     fill: "outline",
+    accent: null,
     statuses: ["released", "unrepairable", "returned_as_is"],
     entry: "released",
     dwellLimitHours: Number.POSITIVE_INFINITY,

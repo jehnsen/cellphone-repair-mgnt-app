@@ -392,7 +392,7 @@ export function TicketView({ ticketId }: { ticketId: string }) {
                   {formatMobile(customer.mobile)}
                 </p>
                 <Button asChild variant="ghost" size="xs" className="mt-1 -ml-2">
-                  <Link href="/customers">View history</Link>
+                  <Link href={`/customers?c=${customer.id}`}>View history</Link>
                 </Button>
               </PanelBody>
             </Panel>

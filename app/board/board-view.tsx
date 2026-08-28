@@ -39,7 +39,7 @@ import { StageChip } from "@/components/tag/stage-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
 import { agingOf, nextStatuses } from "@/lib/status";
-import type { Stage } from "@/lib/stages";
+import type { Stage, StageMeta } from "@/lib/stages";
 import {
   agingLabel,
   BOARD_MOVES,
@@ -60,6 +60,42 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Ticket, TicketStatus } from "@/lib/types";
+
+/**
+ * Column wayfinding hues. Applied only to the header — a left rule plus a
+ * faint header wash — so the cards stay uncoloured and the overdue-red edge
+ * on a card never competes with a status hue. Keyed by `StageMeta.accent`.
+ */
+const STAGE_ACCENT: Record<
+  NonNullable<StageMeta["accent"]>,
+  { rule: string; fill: string; code: string }
+> = {
+  check: {
+    rule: "border-stage-check",
+    fill: "bg-stage-check-fill",
+    code: "text-stage-check",
+  },
+  "wait-customer": {
+    rule: "border-stage-wait-customer",
+    fill: "bg-stage-wait-customer-fill",
+    code: "text-stage-wait-customer",
+  },
+  "wait-parts": {
+    rule: "border-stage-wait-parts",
+    fill: "bg-stage-wait-parts-fill",
+    code: "text-stage-wait-parts",
+  },
+  repair: {
+    rule: "border-stage-repair",
+    fill: "bg-stage-repair-fill",
+    code: "text-stage-repair",
+  },
+  ready: {
+    rule: "border-stage-ready",
+    fill: "bg-stage-ready-fill",
+    code: "text-stage-ready",
+  },
+};
 
 export function BoardView() {
   const router = useRouter();
@@ -472,17 +508,38 @@ export function BoardView() {
                         if (id && canDropOn(stage, id)) void dropOn(stage, id);
                       }}
                     >
-                      <div className="px-1 pb-2">
-                        <div className="flex items-baseline gap-2">
-                          <span className="label-bin truncate text-ink">{meta.label}</span>
-                          <span className="mono text-xs text-ink-faint">
-                            {columnTickets.length}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 truncate text-[0.6875rem] leading-tight text-ink-faint">
-                          {meta.hint}
-                        </p>
-                      </div>
+                      {(() => {
+                        const accent = meta.accent
+                          ? STAGE_ACCENT[meta.accent]
+                          : null;
+                        return (
+                          <div
+                            className={cn(
+                              "mb-2 rounded-md border-l-2 px-2 py-1.5",
+                              accent
+                                ? cn(accent.rule, accent.fill)
+                                : "border-rule",
+                            )}
+                          >
+                            <div className="flex items-baseline gap-2">
+                              <span className="label-bin truncate text-ink">
+                                {meta.label}
+                              </span>
+                              <span
+                                className={cn(
+                                  "mono text-xs",
+                                  accent ? accent.code : "text-ink-faint",
+                                )}
+                              >
+                                {columnTickets.length}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 truncate text-[0.6875rem] leading-tight text-ink-faint">
+                              {meta.hint}
+                            </p>
+                          </div>
+                        );
+                      })()}
                       <div
                         className={cn(
                           "space-y-2 rounded-lg border border-transparent p-1 transition-colors",

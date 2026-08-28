@@ -8,13 +8,23 @@
  * measurement is in millimetres against the physical roll.
  *
  * Width is set by the caller — 58mm and 80mm are the two rolls Philippine
- * counter printers use — and the page box follows it so the driver does not
- * scale the sheet down to fit A4.
+ * counter printers use.
+ *
+ * The paper *size* (`@page { size: 80mm auto }`) is NOT set here: a `@page`
+ * size descriptor is only honoured from a stylesheet present when the
+ * document is parsed, and this string is injected at render time into a
+ * `<style>` deep in `<body>`. So the roll page lives in `globals.css` as a
+ * named `@page receipt`, claimed by `.receipt { page: receipt }`. What this
+ * file owns is everything that *does* work from an inline sheet: the fixed
+ * content width (so the money column never runs off the edge), the mono
+ * type, the dashed rules, and the no-break rules.
  */
 export const receiptCss = (widthMm: 58 | 80) => `
 .receipt {
   font-family: ui-monospace, "Cascadia Mono", "Courier New", monospace;
   width: ${widthMm - 8}mm;
+  max-width: ${widthMm - 8}mm;
+  margin: 0 auto;
   color: #000;
   background: #fff;
   font-size: ${widthMm === 58 ? "7pt" : "8pt"};
@@ -88,16 +98,13 @@ export const receiptCss = (widthMm: 58 | 80) => `
 }
 
 @media print {
-  /* The sheet IS the roll: height grows with content, and the margin is the
-     printer's own dead zone. Without this the driver centres a narrow strip
-     on A4 and the counter gets one receipt per page of blank paper. */
-  @page {
-    size: ${widthMm}mm auto;
-    margin: 3mm 4mm;
-  }
-
   .receipt {
-    width: auto;
+    /* Hold the roll width — never fall back to \`auto\`, or the flex rows
+       stretch to the sheet and \`space-between\` throws the values off the
+       right edge (the bug this file exists to prevent). */
+    width: ${widthMm - 8}mm;
+    max-width: ${widthMm - 8}mm;
+    margin: 0;
   }
 
   /* A receipt is one continuous strip; nothing in it may break. */
