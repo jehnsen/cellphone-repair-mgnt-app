@@ -122,7 +122,7 @@ export const EMPTY_DB: Database = {
   shifts: [],
   services: [],
   warrantyTemplates: [],
-  notificationTemplates: [],
+  messageTemplates: [],
   notifications: [],
   shop: {
     name: "",

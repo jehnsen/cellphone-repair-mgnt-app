@@ -319,6 +319,34 @@ export interface ShiftDto {
   cash_movements?: CashMovementDto[];
 }
 
+/* ── Branch settings and message templates ──────────────────────────── */
+
+export type SettingTypeDto = "string" | "int" | "decimal" | "bool" | "json";
+
+export interface SettingDto {
+  key: string;
+  value: string | number | boolean | null | Record<string, unknown> | unknown[];
+  type: SettingTypeDto;
+  /** `branch` — this branch overrode it; `global` — the shop-wide default. */
+  source: "branch" | "global";
+  /** Whether a branch is allowed to override this key at all. */
+  overridable?: boolean;
+}
+
+export type MessageChannelDto = "viber" | "sms" | "email";
+
+export interface MessageTemplateDto {
+  ulid: string;
+  channel: MessageChannelDto;
+  event_key: string;
+  body: string;
+  is_active: boolean;
+  /** `{{merge_field}}` names parsed out of the body, for the editor. */
+  merge_fields?: string[] | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 /** See docs/backend-findings-spec.md. Not served by the API yet. */
 export interface RepairFindingDto {
   ulid: string;

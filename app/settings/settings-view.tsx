@@ -1,29 +1,116 @@
 "use client";
 
-import { PlugZap, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Building2,
+  MessageSquareText,
+  PlugZap,
+  RefreshCw,
+  RotateCcw,
+  Settings2,
+  SlidersHorizontal,
+} from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
 import { DataSourceNotice } from "@/components/shell/data-source-notice";
-import { StageStub } from "@/components/shell/stage-stub";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
-import { useShop } from "@/lib/shop/store";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
+import { useMutation, useQuery, useShop } from "@/lib/shop/store";
+import { ApiError, toastError } from "@/lib/api/errors";
+import { mergeFieldsOf } from "@/lib/api/mappers";
 import { count } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { BranchPatch, SettingPatch } from "@/lib/shop/contract";
+import type {
+  BranchProfile,
+  MessageChannel,
+  MessageEventKey,
+  MessageTemplate,
+  ShopSetting,
+} from "@/lib/types";
 
 /**
- * Settings is still mostly stage 9. The connection panel belongs here now:
- * it is where someone goes to ask "what is this app actually reading?".
+ * Settings, in four parts:
+ *   1. Connection — what this browser is reading and writing (was here already).
+ *   2. Branch — the shop's own identity: name, address, contact, TIN, VAT
+ *      registration, receipt header/footer (`PATCH /branches/{ulid}`).
+ *   3. Configuration — the branch's key/value overrides against the shop
+ *      defaults (`GET/PUT /settings`).
+ *   4. Message templates — the Viber/SMS/email copy for each lifecycle hook
+ *      (`/message-templates`).
+ *
+ * The last three need `settings.manage` server-side; a 403 is shown as a plain
+ * "not permitted" state rather than an error.
  */
 export function SettingsView() {
-  const { apiBaseUrl, user, db, signOut } = useShop();
-
   return (
     <div className="page space-y-4 sm:space-y-5">
       <PageHeader
         eyebrow="Settings"
-        title="Connection"
-        description="Where this browser reads and writes the shop's records."
+        title="Shop configuration"
+        description="The connection, this branch's details and config overrides, and the message templates."
       />
 
+      <Tabs defaultValue="connection">
+        <TabsList>
+          <TabsTrigger value="connection">
+            <PlugZap aria-hidden /> Connection
+          </TabsTrigger>
+          <TabsTrigger value="branch">
+            <Building2 aria-hidden /> Branch
+          </TabsTrigger>
+          <TabsTrigger value="config">
+            <SlidersHorizontal aria-hidden /> Configuration
+          </TabsTrigger>
+          <TabsTrigger value="templates">
+            <MessageSquareText aria-hidden /> Message templates
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="connection" className="space-y-4 pt-4 sm:space-y-5">
+          <ConnectionTab />
+        </TabsContent>
+        <TabsContent value="branch" className="pt-4">
+          <BranchTab />
+        </TabsContent>
+        <TabsContent value="config" className="pt-4">
+          <ConfigTab />
+        </TabsContent>
+        <TabsContent value="templates" className="pt-4">
+          <TemplatesTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/* ── Connection ──────────────────────────────────────────────────────── */
+
+function ConnectionTab() {
+  const { apiBaseUrl, user, db, signOut } = useShop();
+
+  return (
+    <>
       <DataSourceNotice />
 
       <Panel>
@@ -61,19 +148,7 @@ export function SettingsView() {
           <Row label="Staff" value={count(db.users.length)} mono />
         </dl>
       </Panel>
-
-      <StageStub
-        stage={9}
-        title="The rest of settings"
-        summary="Users and roles, service catalog, warranty templates, shop profile, and notification templates."
-        covers={[
-          "Permission matrix by role",
-          "Service catalog and price list",
-          "Receipt header, footer, and BIR display toggle",
-          "Viber and SMS templates with merge fields",
-        ]}
-      />
-    </div>
+    </>
   );
 }
 
@@ -96,4 +171,918 @@ function Row({
       </dd>
     </div>
   );
+}
+
+/* ── Branch profile ──────────────────────────────────────────────────── */
+
+/** The editable fields, in the order the form lays them out. */
+const BRANCH_FIELDS: {
+  key: keyof BranchPatch;
+  label: string;
+  hint?: string;
+  wide?: boolean;
+  multiline?: boolean;
+  type?: "email" | "tel";
+}[] = [
+  { key: "name", label: "Display name" },
+  { key: "legalName", label: "Registered / legal name" },
+  { key: "addressLine1", label: "Address line 1", wide: true },
+  { key: "addressLine2", label: "Address line 2", wide: true },
+  { key: "city", label: "City / municipality" },
+  { key: "province", label: "Province" },
+  { key: "postalCode", label: "Postal code" },
+  { key: "contactPhone", label: "Contact phone", type: "tel" },
+  { key: "contactEmail", label: "Contact email", type: "email" },
+  { key: "tin", label: "TIN", hint: "Prints on official receipts." },
+  { key: "birPermitNo", label: "BIR permit no." },
+  {
+    key: "receiptHeaderText",
+    label: "Receipt header",
+    hint: "Shown at the top of every printed receipt and claim stub.",
+    wide: true,
+    multiline: true,
+  },
+  {
+    key: "receiptFooterText",
+    label: "Receipt footer",
+    hint: "Shown at the bottom — return policy, thanks, hotline.",
+    wide: true,
+    multiline: true,
+  },
+];
+
+type BranchDraft = Record<keyof BranchPatch, string>;
+
+function draftFromBranch(branch: BranchProfile): BranchDraft {
+  return {
+    name: branch.name,
+    legalName: branch.legalName,
+    addressLine1: branch.addressLine1,
+    addressLine2: branch.addressLine2,
+    city: branch.city,
+    province: branch.province,
+    postalCode: branch.postalCode,
+    contactPhone: branch.contactPhone,
+    contactEmail: branch.contactEmail,
+    tin: branch.tin,
+    birPermitNo: branch.birPermitNo,
+    vatRegistered: String(branch.vatRegistered),
+    receiptHeaderText: branch.receiptHeaderText,
+    receiptFooterText: branch.receiptFooterText,
+  };
+}
+
+function BranchTab() {
+  const query = useQuery((api) => api.getBranch(), []);
+  const save = useMutation((api, patch: BranchPatch) => api.updateBranch(patch));
+
+  const [draft, setDraft] = useState<BranchDraft | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const branch = query.data;
+  const current = draft ?? (branch ? draftFromBranch(branch) : null);
+
+  const dirtyKeys = useMemo(() => {
+    if (!branch || !current) return [];
+    const base = draftFromBranch(branch);
+    return (Object.keys(base) as (keyof BranchDraft)[]).filter(
+      (key) => current[key] !== base[key],
+    );
+  }, [branch, current]);
+
+  const set = (key: keyof BranchDraft, value: string) => {
+    setDraft((d) => ({ ...(d ?? draftFromBranch(branch!)), [key]: value }));
+    setFieldErrors((e) => {
+      if (!e[key]) return e;
+      const next = { ...e };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const submit = async () => {
+    if (!branch || !current || dirtyKeys.length === 0) return;
+    const patch: BranchPatch = {};
+    for (const key of dirtyKeys) {
+      if (key === "vatRegistered") patch.vatRegistered = current.vatRegistered === "true";
+      else patch[key] = current[key];
+    }
+
+    const { data, error } = await save.mutate(patch);
+    if (data) {
+      toast.success("Branch details saved.");
+      setDraft(null);
+      setFieldErrors({});
+      query.refetch();
+    } else if (error) {
+      if (error instanceof ApiError && Object.keys(error.fieldErrors).length) {
+        /* Wire snake_case field paths back onto the camelCase inputs. */
+        const mapped: Record<string, string> = {};
+        for (const [field, message] of Object.entries(error.fieldErrors)) {
+          mapped[snakeToCamel(field)] = message;
+        }
+        setFieldErrors(mapped);
+      }
+      const { message, description } = toastError(error, "Could not save branch details.");
+      toast.error(message, { description });
+    }
+  };
+
+  if (query.loading) {
+    return (
+      <Panel>
+        <LoadingRows rows={8} />
+      </Panel>
+    );
+  }
+  if (query.error || !branch || !current) {
+    return permissionOr(
+      query.error ?? new Error("Branch unavailable."),
+      "view this branch's details",
+      query.refetch,
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs leading-relaxed text-ink-soft">
+        This is the shop's own record — its name, address, tax details, and the
+        header and footer that print on every receipt. Changes take effect on the
+        next print, no reload needed.
+      </p>
+
+      <Panel>
+        <PanelHeader>
+          <Building2 className="size-3.5 text-ink-faint" aria-hidden />
+          <PanelTitle>{branch.name}</PanelTitle>
+          <span className="mono ml-auto text-xs text-ink-faint">
+            {branch.code} · {branch.timezone}
+          </span>
+        </PanelHeader>
+
+        <PanelBody className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+          {BRANCH_FIELDS.map((field) => (
+            <div
+              key={field.key}
+              className={cn("space-y-1.5", field.wide && "sm:col-span-2")}
+            >
+              <Label htmlFor={`br-${field.key}`}>{field.label}</Label>
+              {field.multiline ? (
+                <Textarea
+                  id={`br-${field.key}`}
+                  value={current[field.key]}
+                  onChange={(e) => set(field.key, e.target.value)}
+                  rows={2}
+                  aria-invalid={Boolean(fieldErrors[field.key]) || undefined}
+                />
+              ) : (
+                <Input
+                  id={`br-${field.key}`}
+                  type={field.type}
+                  value={current[field.key]}
+                  onChange={(e) => set(field.key, e.target.value)}
+                  aria-invalid={Boolean(fieldErrors[field.key]) || undefined}
+                />
+              )}
+              {fieldErrors[field.key] ? (
+                <p className="text-xs text-stamp-ink">{fieldErrors[field.key]}</p>
+              ) : field.hint ? (
+                <p className="text-xs text-ink-faint">{field.hint}</p>
+              ) : null}
+            </div>
+          ))}
+
+          <label className="flex items-center gap-2 text-sm text-ink sm:col-span-2">
+            <Switch
+              checked={current.vatRegistered === "true"}
+              onCheckedChange={(on) => set("vatRegistered", on ? "true" : "false")}
+            />
+            VAT-registered
+            <span className="text-xs text-ink-faint">
+              — changes receipt layout and how the senior/PWD discount is computed.
+            </span>
+          </label>
+        </PanelBody>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-rule px-3 py-2 sm:px-4">
+          <span className="text-xs text-ink-soft">
+            {dirtyKeys.length
+              ? `${dirtyKeys.length} unsaved change${dirtyKeys.length === 1 ? "" : "s"}`
+              : "No unsaved changes"}
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDraft(null);
+                setFieldErrors({});
+              }}
+              disabled={dirtyKeys.length === 0 || save.pending}
+            >
+              Discard
+            </Button>
+            <Button
+              size="sm"
+              onClick={submit}
+              disabled={dirtyKeys.length === 0 || save.pending}
+            >
+              {save.pending ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function snakeToCamel(field: string): string {
+  return field.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+/* ── Configuration ───────────────────────────────────────────────────── */
+
+/**
+ * A key's group is the segment before the first dot — `bir.display_on_receipt`
+ * groups under "bir". Keys are open-ended, so this is presentation only.
+ */
+function groupOf(key: string): string {
+  const dot = key.indexOf(".");
+  return dot === -1 ? "general" : key.slice(0, dot);
+}
+
+const GROUP_LABEL: Record<string, string> = {
+  bir: "BIR & receipts",
+  notifications: "Notifications",
+  pos: "Point of sale",
+  tickets: "Repair tickets",
+  general: "General",
+};
+
+/** What the user typed, before it goes back on the wire in the right type. */
+type Draft = Record<string, string>;
+
+function ConfigTab() {
+  const query = useQuery((api) => api.getSettings(), []);
+  const save = useMutation((api, patch: SettingPatch) => api.updateSettings(patch));
+
+  const [draft, setDraft] = useState<Draft>({});
+
+  const settings = query.data ?? [];
+  const groups = useMemo(() => {
+    const map = new Map<string, ShopSetting[]>();
+    for (const setting of [...settings].sort((a, b) => a.key.localeCompare(b.key))) {
+      const group = groupOf(setting.key);
+      (map.get(group) ?? map.set(group, []).get(group)!).push(setting);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [settings]);
+
+  const edited = Object.keys(draft).filter((key) => {
+    const setting = settings.find((entry) => entry.key === key);
+    return setting ? draft[key] !== stringifyValue(setting) : false;
+  });
+
+  const commit = async () => {
+    const patch: SettingPatch = {};
+    for (const key of edited) {
+      const setting = settings.find((entry) => entry.key === key)!;
+      const parsed = parseValue(draft[key]!, setting.type);
+      if (parsed instanceof Error) {
+        toast.error(`${key} is not valid ${setting.type}.`, {
+          description: parsed.message,
+        });
+        return;
+      }
+      patch[key] = { value: parsed, type: setting.type };
+    }
+
+    const { data, error } = await save.mutate(patch);
+    if (data) {
+      toast.success(
+        `${edited.length} setting${edited.length === 1 ? "" : "s"} saved.`,
+      );
+      setDraft({});
+      query.refetch();
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not save settings.");
+      toast.error(message, { description });
+    }
+  };
+
+  const resetToGlobal = async (key: string) => {
+    const { data, error } = await save.mutate({ [key]: null });
+    if (data) {
+      toast.success(`${key} reset to the shop default.`);
+      setDraft((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      query.refetch();
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not reset the setting.");
+      toast.error(message, { description });
+    }
+  };
+
+  if (query.loading) {
+    return (
+      <Panel>
+        <LoadingRows rows={6} />
+      </Panel>
+    );
+  }
+
+  if (query.error) {
+    return permissionOr(query.error, "view this branch's configuration", query.refetch);
+  }
+
+  if (settings.length === 0) {
+    return (
+      <Panel>
+        <EmptyState
+          icon={Settings2}
+          title="No configuration keys."
+          body="This branch has no settings yet — they appear here once the shop defaults are seeded."
+        />
+      </Panel>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs leading-relaxed text-ink-soft">
+        Each key shows its effective value. A key marked{" "}
+        <Badge variant="bench" className="mx-0.5 align-middle">
+          branch
+        </Badge>{" "}
+        has been overridden here; the rest fall back to the shop-wide default.
+        Resetting an override restores the default.
+      </p>
+
+      {groups.map(([group, rows]) => (
+        <Panel key={group}>
+          <PanelHeader>
+            <PanelTitle>{GROUP_LABEL[group] ?? group}</PanelTitle>
+            <span className="mono ml-auto text-xs text-ink-faint">
+              {rows.length} key{rows.length === 1 ? "" : "s"}
+            </span>
+          </PanelHeader>
+          <ul className="divide-y divide-rule-soft">
+            {rows.map((setting) => (
+              <SettingRow
+                key={setting.key}
+                setting={setting}
+                value={draft[setting.key] ?? stringifyValue(setting)}
+                dirty={edited.includes(setting.key)}
+                onChange={(next) =>
+                  setDraft((current) => ({ ...current, [setting.key]: next }))
+                }
+                onReset={() => resetToGlobal(setting.key)}
+                busy={save.pending}
+              />
+            ))}
+          </ul>
+        </Panel>
+      ))}
+
+      <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-rule bg-copy px-3 py-2 shadow-float sm:px-4">
+        <span className="text-xs text-ink-soft">
+          {edited.length
+            ? `${edited.length} unsaved change${edited.length === 1 ? "" : "s"}`
+            : "No unsaved changes"}
+        </span>
+        <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDraft({})}
+            disabled={edited.length === 0 || save.pending}
+          >
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            onClick={commit}
+            disabled={edited.length === 0 || save.pending}
+          >
+            {save.pending ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingRow({
+  setting,
+  value,
+  dirty,
+  onChange,
+  onReset,
+  busy,
+}: {
+  setting: ShopSetting;
+  value: string;
+  dirty: boolean;
+  onChange: (next: string) => void;
+  onReset: () => void;
+  busy: boolean;
+}) {
+  const leaf = setting.key.slice(setting.key.indexOf(".") + 1).replace(/[._]/g, " ");
+
+  return (
+    <li
+      className={cn(
+        "flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-4",
+        dirty && "bg-flag-fill",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mono text-xs font-semibold text-ink">{setting.key}</span>
+          {setting.source === "branch" ? (
+            <Badge variant="bench">branch</Badge>
+          ) : (
+            <Badge variant="ghost">global</Badge>
+          )}
+          <span className="mono text-[0.6875rem] text-ink-faint">{setting.type}</span>
+          {!setting.overridable ? (
+            <span className="text-[0.6875rem] text-ink-faint">shop-wide only</span>
+          ) : null}
+        </div>
+        <p className="mt-0.5 text-xs capitalize text-ink-soft">{leaf}</p>
+      </div>
+
+      <div className="flex items-center gap-2 sm:w-72 sm:shrink-0">
+        <SettingField
+          setting={setting}
+          value={value}
+          onChange={onChange}
+          disabled={!setting.overridable}
+        />
+        {setting.source === "branch" ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Reset ${setting.key} to the shop default`}
+            title="Reset to the shop default"
+            onClick={onReset}
+            disabled={busy}
+          >
+            <RotateCcw aria-hidden />
+          </Button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function SettingField({
+  setting,
+  value,
+  onChange,
+  disabled,
+}: {
+  setting: ShopSetting;
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  if (setting.type === "bool") {
+    return (
+      <label className="flex flex-1 items-center gap-2 text-sm text-ink">
+        <Switch
+          checked={value === "true"}
+          onCheckedChange={(on) => onChange(on ? "true" : "false")}
+          disabled={disabled}
+        />
+        <span className="mono text-xs text-ink-soft">{value}</span>
+      </label>
+    );
+  }
+
+  if (setting.type === "json") {
+    return (
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        className="mono flex-1 text-xs"
+        spellCheck={false}
+        disabled={disabled}
+      />
+    );
+  }
+
+  const numeric = setting.type === "int" || setting.type === "decimal";
+  return (
+    <Input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      inputMode={numeric ? "decimal" : undefined}
+      className={cn("flex-1", numeric && "mono")}
+      placeholder={setting.type === "string" ? "empty" : undefined}
+      disabled={disabled}
+    />
+  );
+}
+
+/* Value <-> string, per type. `parseValue` returns an Error for a bad entry. */
+
+function stringifyValue(setting: ShopSetting): string {
+  return valueToString(setting.value, setting.type);
+}
+
+function valueToString(
+  value: ShopSetting["value"],
+  type: ShopSetting["type"],
+): string {
+  if (value === null || value === undefined) return type === "bool" ? "false" : "";
+  if (type === "json") return JSON.stringify(value, null, 2);
+  if (type === "bool") return value ? "true" : "false";
+  return String(value);
+}
+
+function parseValue(
+  raw: string,
+  type: ShopSetting["type"],
+): string | number | boolean | null | Record<string, unknown> | unknown[] | Error {
+  const trimmed = raw.trim();
+  switch (type) {
+    case "bool":
+      return trimmed === "true";
+    case "int": {
+      if (trimmed === "") return null;
+      const n = Number(trimmed);
+      return Number.isInteger(n) ? n : new Error("Whole numbers only.");
+    }
+    case "decimal": {
+      if (trimmed === "") return null;
+      const n = Number(trimmed);
+      return Number.isFinite(n) ? n : new Error("Must be a number.");
+    }
+    case "json": {
+      if (trimmed === "") return null;
+      try {
+        return JSON.parse(trimmed) as Record<string, unknown> | unknown[];
+      } catch {
+        return new Error("Not valid JSON.");
+      }
+    }
+    default:
+      return trimmed === "" ? null : raw;
+  }
+}
+
+/* ── Message templates ───────────────────────────────────────────────── */
+
+const CHANNELS: MessageChannel[] = ["sms", "viber", "email"];
+
+const EVENT_KEYS: MessageEventKey[] = [
+  "ticket.received",
+  "ticket.ready_for_pickup",
+  "ticket.released",
+  "ticket.unclaimed_30",
+  "ticket.unclaimed_60",
+  "ticket.unclaimed_90",
+  "quote.sent",
+  "warranty.expiring_soon",
+  "installment.due_reminder",
+  "installment.overdue",
+];
+
+const EVENT_LABEL: Record<MessageEventKey, string> = {
+  "ticket.received": "Job order received",
+  "ticket.ready_for_pickup": "Ready for pickup",
+  "ticket.released": "Unit released",
+  "ticket.unclaimed_30": "Unclaimed — 30 days",
+  "ticket.unclaimed_60": "Unclaimed — 60 days",
+  "ticket.unclaimed_90": "Unclaimed — 90 days",
+  "quote.sent": "Quote sent",
+  "warranty.expiring_soon": "Warranty expiring soon",
+  "installment.due_reminder": "Installment due reminder",
+  "installment.overdue": "Installment overdue",
+};
+
+const CHANNEL_LABEL: Record<MessageChannel, string> = {
+  sms: "SMS",
+  viber: "Viber",
+  email: "Email",
+};
+
+function eventLabelOf(key: string): string {
+  return EVENT_LABEL[key as MessageEventKey] ?? key;
+}
+
+function TemplatesTab() {
+  const query = useQuery((api) => api.getMessageTemplates(), []);
+  const [editing, setEditing] = useState<MessageTemplate | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const templates = query.data ?? [];
+
+  const byEvent = useMemo(() => {
+    const map = new Map<string, MessageTemplate[]>();
+    for (const template of templates) {
+      (map.get(template.eventKey) ?? map.set(template.eventKey, []).get(template.eventKey)!)
+        .push(template);
+    }
+    /* Known hooks first, in lifecycle order; anything unrecognised after. */
+    const keys = [
+      ...EVENT_KEYS.filter((key) => map.has(key)),
+      ...[...map.keys()].filter((key) => !EVENT_KEYS.includes(key as MessageEventKey)),
+    ];
+    return keys.map((key) => ({
+      key,
+      rows: map
+        .get(key)!
+        .slice()
+        .sort((a, b) => a.channel.localeCompare(b.channel)),
+    }));
+  }, [templates]);
+
+  if (query.loading) {
+    return (
+      <Panel>
+        <LoadingRows rows={6} />
+      </Panel>
+    );
+  }
+
+  if (query.error) {
+    return permissionOr(query.error, "view message templates", query.refetch);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
+          One template per lifecycle hook per channel. Use{" "}
+          <code className="mono rounded-sm bg-secondary px-1 text-[0.6875rem]">
+            {"{{merge_field}}"}
+          </code>{" "}
+          placeholders — they are filled in when the message is sent. Retire a
+          template by switching it off; there is no delete.
+        </p>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <MessageSquareText aria-hidden /> New template
+        </Button>
+      </div>
+
+      {templates.length === 0 ? (
+        <Panel>
+          <EmptyState
+            icon={MessageSquareText}
+            title="No templates yet."
+            body="Add one for the hooks you want to notify customers on — ready for pickup is the usual first."
+          />
+        </Panel>
+      ) : (
+        byEvent.map(({ key, rows }) => (
+          <Panel key={key}>
+            <PanelHeader>
+              <PanelTitle>{eventLabelOf(key)}</PanelTitle>
+              <span className="mono ml-auto text-xs text-ink-faint">{key}</span>
+            </PanelHeader>
+            <ul className="divide-y divide-rule-soft">
+              {rows.map((template) => (
+                <li
+                  key={template.id}
+                  className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-4"
+                >
+                  <div className="flex items-center gap-2 sm:w-24 sm:shrink-0">
+                    <Badge variant="tint">{CHANNEL_LABEL[template.channel]}</Badge>
+                  </div>
+                  <p
+                    className={cn(
+                      "min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed",
+                      template.active ? "text-ink" : "text-ink-faint line-through",
+                    )}
+                  >
+                    {template.body}
+                  </p>
+                  <div className="flex items-center gap-2 sm:shrink-0">
+                    {!template.active ? (
+                      <Badge variant="ghost">off</Badge>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => setEditing(template)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ))
+      )}
+
+      {editing ? (
+        <TemplateDialog
+          template={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            query.refetch();
+          }}
+        />
+      ) : null}
+
+      {creating ? (
+        <TemplateDialog
+          existing={templates}
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false);
+            query.refetch();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function TemplateDialog({
+  template,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  template?: MessageTemplate;
+  existing?: MessageTemplate[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = Boolean(template);
+  const create = useMutation((api, ...[input]: Parameters<typeof api.createMessageTemplate>) =>
+    api.createMessageTemplate(input),
+  );
+  const update = useMutation((api, ...[input]: Parameters<typeof api.updateMessageTemplate>) =>
+    api.updateMessageTemplate(input),
+  );
+  const pending = create.pending || update.pending;
+
+  const [channel, setChannel] = useState<MessageChannel>(template?.channel ?? "sms");
+  const [eventKey, setEventKey] = useState<MessageEventKey>(
+    template?.eventKey ?? "ticket.ready_for_pickup",
+  );
+  const [body, setBody] = useState(template?.body ?? "");
+  const [active, setActive] = useState(template?.active ?? true);
+
+  const taken = useMemo(() => {
+    const pairs = new Set(
+      (existing ?? []).map((entry) => `${entry.channel}:${entry.eventKey}`),
+    );
+    return pairs;
+  }, [existing]);
+
+  const collision =
+    !isEdit && taken.has(`${channel}:${eventKey}`);
+  const mergeFields = mergeFieldsOf(body);
+  const canSave = body.trim().length > 0 && !collision && !pending;
+
+  const submit = async () => {
+    const outcome = isEdit
+      ? await update.mutate({ id: template!.id, body: body.trim(), active })
+      : await create.mutate({ channel, eventKey, body: body.trim(), active });
+
+    if (outcome.data) {
+      toast.success(isEdit ? "Template updated." : "Template created.");
+      onSaved();
+    } else if (outcome.error) {
+      const { message, description } = toastError(
+        outcome.error,
+        "Could not save the template.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {isEdit
+              ? `Edit ${CHANNEL_LABEL[template!.channel]} — ${eventLabelOf(template!.eventKey)}`
+              : "New message template"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Channel</Label>
+              <Select
+                value={channel}
+                onValueChange={(v) => setChannel(v as MessageChannel)}
+                disabled={isEdit}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNELS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {CHANNEL_LABEL[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Lifecycle hook</Label>
+              <Select
+                value={eventKey}
+                onValueChange={(v) => setEventKey(v as MessageEventKey)}
+                disabled={isEdit}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EVENT_KEYS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {EVENT_LABEL[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {collision ? (
+            <p className="rounded-sm border border-stamp bg-stamp-fill px-2.5 py-1.5 text-xs text-stamp-ink">
+              A {CHANNEL_LABEL[channel]} template already exists for this hook.
+              Edit that one instead.
+            </p>
+          ) : null}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="tmpl-body">Message</Label>
+            <Textarea
+              id="tmpl-body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={4}
+              placeholder="Hi {{customer_name}}, your {{device_model}} (JO# {{ticket_number}}) is ready for pickup."
+            />
+            {mergeFields.length ? (
+              <p className="flex flex-wrap items-center gap-1 text-xs text-ink-soft">
+                <span className="text-ink-faint">Merge fields:</span>
+                {mergeFields.map((field) => (
+                  <code
+                    key={field}
+                    className="mono rounded-sm bg-secondary px-1 text-[0.6875rem]"
+                  >
+                    {field}
+                  </code>
+                ))}
+              </p>
+            ) : null}
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <Switch checked={active} onCheckedChange={setActive} />
+            {active ? "Active" : "Retired (off)"}
+          </label>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {pending ? "Saving…" : isEdit ? "Save changes" : "Create template"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Shared ──────────────────────────────────────────────────────────── */
+
+/**
+ * A 403 on these tabs means the account lacks `settings.manage` — a fact of
+ * the sign-in, not a fault to retry. Anything else is a real error.
+ */
+function permissionOr(error: Error, action: string, onRetry: () => void) {
+  if (error instanceof ApiError && error.code === "FORBIDDEN") {
+    return (
+      <Panel>
+        <EmptyState
+          icon={Settings2}
+          title="Not permitted."
+          body={`Your account cannot ${action}. Ask the shop owner, who has settings access.`}
+        />
+      </Panel>
+    );
+  }
+  return <ErrorState error={error} onRetry={onRetry} />;
 }

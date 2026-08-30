@@ -9,6 +9,7 @@ import {
 import { createLiveApi, dashboardFromTickets, type LiveContext } from "@/lib/api/live-api";
 import { createUnavailableApi } from "@/lib/api/unavailable";
 import { createCommerceApi, loadInventory } from "@/lib/api/live-commerce";
+import { createSettingsApi } from "@/lib/api/live-settings";
 import { toSale, toShift, toSupplier } from "@/lib/api/mappers-commerce";
 import type { HttpClient } from "@/lib/api/http";
 import type {
@@ -26,12 +27,14 @@ import { money, manilaDayKey } from "@/lib/format";
 import type { ShopApi } from "@/lib/shop/contract";
 import { EMPTY_DB, type ShopAction } from "@/lib/shop/reducer";
 import type {
+  BranchProfile,
   Customer,
   Database,
   InventoryItem,
   Sale,
   ServiceItem,
   Shift,
+  ShopProfile,
   Supplier,
   Ticket,
   User,
@@ -60,6 +63,10 @@ const MUTATIONS = new Set<keyof ShopApi>([
   "openShift",
   "closeShift",
   "addCashMovement",
+  "updateSettings",
+  "updateBranch",
+  "createMessageTemplate",
+  "updateMessageTemplate",
 ]);
 
 export interface ShopApiDeps {
@@ -83,6 +90,7 @@ export function createShopApi({
     ...createUnavailableApi(),
     ...createLiveApi(client, context),
     ...createCommerceApi(client, context),
+    ...createSettingsApi(client, context),
   };
 
   /* The day sheet's counts.
@@ -162,6 +170,16 @@ function wrap(
       if (method === "getTicket" && result) {
         deps.dispatchQuiet({ type: "upsertTicket", ticket: result as Ticket });
       }
+      /* Receipts and POS read `db.shop`, a lossy view of the branch row. Keep
+         its overlapping fields in step whenever the branch profile is read or
+         edited, so a name or VAT change shows on the next print without a
+         reload. */
+      if ((method === "getBranch" || method === "updateBranch") && result) {
+        deps.dispatchQuiet({
+          type: "patchShop",
+          patch: shopPatchFromBranch(result as BranchProfile),
+        });
+      }
       /* Customers render straight off `db.customers` (no `useQuery`), so a
          create/update has to land in the cache itself — a version bump alone
          refetches nothing here. */
@@ -223,6 +241,27 @@ function startOfToday(): string {
   return `${manilaDayKey(new Date())}T00:00:00+08:00`;
 }
 
+/**
+ * The subset of `ShopProfile` that the branch row owns. `toShopProfile` is the
+ * canonical map from the wire; this mirrors it from the already-parsed
+ * `BranchProfile` so an edit updates `db.shop` without another round trip.
+ */
+function shopPatchFromBranch(branch: BranchProfile): Partial<ShopProfile> {
+  return {
+    name: branch.name,
+    addressLine: [branch.addressLine1, branch.addressLine2]
+      .filter(Boolean)
+      .join(", "),
+    city: [branch.city, branch.province].filter(Boolean).join(", "),
+    mobile: branch.contactPhone,
+    email: branch.contactEmail || undefined,
+    vatRegistered: branch.vatRegistered,
+    tin: branch.tin || undefined,
+    birPermitNo: branch.birPermitNo || undefined,
+    receiptFooter: branch.receiptFooterText,
+  };
+}
+
 /* ── Bootstrap ───────────────────────────────────────────────────────── */
 
 export interface BootstrapResult {
@@ -247,8 +286,17 @@ export async function bootstrapShop(
     return fallback;
   };
 
-  const [customers, users, tickets, items, services, suppliers, sales, shifts] =
+  const [freshBranch, customers, users, tickets, items, services, suppliers, sales, shifts] =
     await Promise.all([
+      /* The stored session branch can be stale — someone may have edited the
+         shop's name or receipt text since sign-in. Re-read it if we can; a
+         cashier who cannot list branches just keeps the stored copy. */
+      branch
+        ? client
+            .get<BranchDto>(`/branches/${branch.ulid}`)
+            .then((response) => response.data)
+            .catch(() => branch)
+        : Promise.resolve(null),
       client
         .getAll<CustomerDto>("/customers")
         .then((rows) => rows.map(toCustomer))
@@ -297,7 +345,9 @@ export async function bootstrapShop(
          preloaded here. */
       timeline: [],
       movements: [],
-      shop: branch ? toShopProfile(branch, EMPTY_DB.shop) : EMPTY_DB.shop,
+      shop: freshBranch
+        ? toShopProfile(freshBranch, EMPTY_DB.shop)
+        : EMPTY_DB.shop,
     },
     warnings,
   };

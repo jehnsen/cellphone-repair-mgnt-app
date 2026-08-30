@@ -21,5 +21,5 @@ export const STORAGE = {
 export const PENDING_CONTEXTS = [
   "Standalone ticket notes without a status change",
   "Warranty slips and warranty claim tickets",
-  "Notification templates and the Viber/SMS outbox",
+  "The Viber/SMS outbox (message templates are live under Settings)",
 ] as const;

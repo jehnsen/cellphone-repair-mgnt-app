@@ -140,6 +140,31 @@ export function createUnavailableApi(): ShopApi {
       throw missing("Recording findings", "PUT /tickets/{ulid}/finding");
     },
 
+    /* Config surfaces. The live client (`createSettingsApi`) overrides these
+       whenever the account can reach them; the floor answers empty for a read
+       and fails loudly for a write, same as everywhere else. */
+    async getBranch() {
+      throw missing("The branch profile", "GET /branches/{ulid}");
+    },
+    async updateBranch() {
+      throw missing("Updating the branch profile", "PATCH /branches/{ulid}");
+    },
+    async getSettings() {
+      return [];
+    },
+    async updateSettings() {
+      throw missing("Updating settings", "PUT /settings");
+    },
+    async getMessageTemplates() {
+      return [];
+    },
+    async createMessageTemplate() {
+      throw missing("Creating a message template", "POST /message-templates");
+    },
+    async updateMessageTemplate() {
+      throw missing("Updating a message template", "PATCH /message-templates/{ulid}");
+    },
+
     async getDashboard() {
       return {
         todaySales: 0,

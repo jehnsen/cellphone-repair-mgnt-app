@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ClipboardCheck,
-  Info,
-  MapPin,
+  Eye,
+  EyeOff,
   ShieldCheck,
   Smartphone,
   Wrench,
@@ -33,6 +33,7 @@ export function LoginView() {
 
   const [email, setEmail] = useState("ricardo.santos@fixmo.test");
   const [password, setPassword] = useState("password");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   /* Rendered after mount so the greeting never mismatches the server HTML. */
   const [now, setNow] = useState<Date | null>(null);
@@ -115,24 +116,22 @@ export function LoginView() {
         />
 
         <div className="relative flex items-center gap-2.5">
-          {/* <span className="grid size-9 place-items-center rounded-lg bg-bench text-white">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-bench text-white shadow-raised">
             <Wrench className="size-4.5" aria-hidden />
-          </span> */}
-          {/* <span className="label-bin text-white">NCC Repair Shop</span> */}
+          </span>
+          <span className="label-bin text-white/90">NCC Repair Shop</span>
         </div>
 
         <div className="relative my-auto max-w-md py-10">
-          <h2
-            className="font-display text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-white xl:text-5xl"
-          >
-            Nelson Cellphone & Computer Repair Shop
+          <h2 className="font-display text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-white xl:text-5xl">
+            {shopName}
           </h2>
-          {/* <p className="mt-4 text-sm leading-relaxed text-white/70">
+          <p className="mt-4 text-sm leading-relaxed text-white/70">
             Intake, the repair board, release, stock, and the drawer — one
             record per job, from the moment it lands on the counter.
-          </p> */}
+          </p>
 
-          {/* <ul className="mt-8 space-y-3">
+          <ul className="mt-8 space-y-3">
             {[
               { icon: ClipboardCheck, text: "Job orders with a printable claim stub" },
               { icon: Smartphone, text: "Handsets tracked one IMEI at a time" },
@@ -145,39 +144,42 @@ export function LoginView() {
                 <span className="text-sm text-white/80">{row.text}</span>
               </li>
             ))}
-          </ul> */}
+          </ul>
         </div>
 
-        {/* <p className="relative text-xs text-white/40">{db.shop.city}</p> */}
+        {db.shop.city ? (
+          <p className="relative text-xs text-white/40">{db.shop.city}</p>
+        ) : null}
       </aside>
 
       {/* Sign-in side. */}
       <main className="flex min-h-dvh flex-col justify-center px-5 py-10 sm:px-10 lg:min-h-0">
-        <div className="mx-auto w-full max-w-sm">
-          {/* The wordmark repeats here for phones, where the panel is hidden. */}
-          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <span className="grid size-9 place-items-center rounded-lg bg-bench text-white">
+        <div className="mx-auto w-full max-w-104">
+          {/* Wordmark. Shown at every width: on desktop the workbench panel
+              carries the name too, but the form still needs its own mark so
+              it is not anonymous; on phones the panel is hidden entirely. */}
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-bench text-white shadow-raised">
               <Wrench className="size-4.5" aria-hidden />
             </span>
-            <span className="label-bin text-ink">Nelson Cellphone & Computer Repair Shop</span>
+            <span className="label-bin text-ink">{shopName}</span>
           </div>
 
-          <p className="label-pad">
-            {now ? formatDate(now) : " "}
-          </p>
-          <h1 className="display-lg mt-1">Good {greeting(now)}.</h1>
-          <p className="mt-1.5 text-sm text-ink-soft">
-            Sign in to open {shopName}.
-          </p>
+          <div className="mt-9">
+            <p className="label-pad">{now ? formatDate(now) : " "}</p>
+            <h1 className="display-lg mt-1.5">Good {greeting(now)}.</h1>
+            <p className="mt-2 text-sm text-ink-soft">
+              Sign in to open the shop for the day.
+            </p>
+          </div>
 
           <form
             onSubmit={(event) => {
               event.preventDefault();
               void submit();
             }}
-            className="mt-7 space-y-4"
+            className="mt-7 space-y-4 rounded-lg border border-rule bg-copy p-5 shadow-raised sm:p-6"
           >
-
             <div className="space-y-1.5">
               <Label htmlFor="email" className="label-pad">
                 Email
@@ -198,19 +200,35 @@ export function LoginView() {
               <Label htmlFor="password" className="label-pad">
                 Password
               </Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Your password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  tabIndex={-1}
+                  className="absolute inset-y-0 right-0 grid w-10 place-items-center text-ink-faint transition-colors hover:text-ink-soft focus-visible:text-ink focus-visible:outline-none"
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" aria-hidden />
+                  ) : (
+                    <Eye className="size-4" aria-hidden />
+                  )}
+                </button>
+              </div>
             </div>
 
             {authError ? <ErrorState error={authError} /> : null}
-
 
             <Button
               type="submit"
@@ -218,20 +236,21 @@ export function LoginView() {
               className="w-full"
               disabled={submitting}
             >
-              {submitting ? "Opening…" : "Open the shop"}
+              {submitting ? "Signing in…" : "Sign in"}
               <ArrowRight aria-hidden />
             </Button>
           </form>
 
-          {/* <div className="mt-6 flex items-start gap-2 text-xs leading-relaxed text-ink-soft">
-            <MapPin className="mt-0.5 size-3.5 shrink-0 text-ink-faint" aria-hidden />
+          {/* This prototype has no real auth — the fields come pre-filled with
+              a seeded identity. Say so plainly rather than implying a login
+              wall that is not there. */}
+          <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-ink-faint">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             <span>
-              {db.shop.addressLine}
-              <br />
-              {db.shop.city} · {db.shop.mobile}
+              Demo sign-in — pre-filled with a seeded account. It does not
+              verify anyone, and every screen is reachable without it.
             </span>
-          </div> */}
-
+          </p>
         </div>
       </main>
     </div>

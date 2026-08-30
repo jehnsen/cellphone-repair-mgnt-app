@@ -31,7 +31,7 @@ export const NAV: NavSection[] = [
   {
     title: "Counter",
     items: [
-      { href: "/", label: "Day sheet", icon: Gauge, permission: null },
+      { href: "/", label: "Dashboard", icon: Gauge, permission: null },
       { href: "/intake", label: "New job order", icon: ClipboardPen, permission: "ticket.create" },
       { href: "/board", label: "Repair board", icon: Columns3, permission: null, badge: "overdue" },
       { href: "/release", label: "Release", icon: PackageCheck, permission: "ticket.release", badge: "ready" },

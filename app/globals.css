@@ -452,7 +452,7 @@
   }
   @page receipt {
     size: 80mm auto;
-    margin: 3mm 4mm;
+    margin: 8mm 6mm;
   }
   .receipt {
     page: receipt;

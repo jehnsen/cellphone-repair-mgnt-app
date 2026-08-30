@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  Archive,
   ArrowRightLeft,
   Columns3,
   ListFilter,
@@ -36,9 +37,10 @@ import {
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { AgingStrip } from "@/components/tag/aging-strip";
 import { StageChip } from "@/components/tag/stage-chip";
+import { StatusChip } from "@/components/tag/status-chip";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
-import { agingOf, nextStatuses } from "@/lib/status";
+import { agingOf, nextStatuses, STATUS_META } from "@/lib/status";
 import type { Stage, StageMeta } from "@/lib/stages";
 import {
   agingLabel,
@@ -102,13 +104,20 @@ export function BoardView() {
   const searchParams = useSearchParams();
   const search = searchParams.get("q") ?? "";
   const overdueOnly = searchParams.get("overdue") === "1";
+  /* Closed jobs (unrepairable, returned unrepaired, released, unclaimed) have
+     no board column — they fold into the off-board "Closed" stage. This filter
+     is the one way back to them without knowing a ticket number. */
+  const closedOnly = searchParams.get("closed") === "1";
 
   const { db, user, api } = useShop();
-  const { data: tickets, loading, error, refetch } = useQuery((api) =>
-    api.getTickets({ includeReleased: false }),
+  const { data: tickets, loading, error, refetch } = useQuery(
+    (api) => api.getTickets({ includeReleased: closedOnly }),
+    [closedOnly],
   );
 
   const [view, setView] = useState<"board" | "table">("board");
+  /* Closed jobs have no columns, so that view is table-only. */
+  const effectiveView = closedOnly ? "table" : view;
   const [brand, setBrand] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -132,6 +141,10 @@ export function BoardView() {
     const now = new Date();
     const needle = search.trim().toLowerCase();
     return (tickets ?? []).filter((ticket) => {
+      /* The board is open jobs; the closed filter is its mirror image. Terminal
+         statuses (unrepairable, returned as-is, released, unclaimed) show only
+         when it is on, and every other status only when it is off. */
+      if (STATUS_META[ticket.status].terminal !== closedOnly) return false;
       if (brand !== "all" && ticket.device.brand !== brand) return false;
       if (overdueOnly && agingOf(ticket, now).tier !== "overdue") return false;
       if (needle) {
@@ -151,7 +164,7 @@ export function BoardView() {
       }
       return true;
     });
-  }, [tickets, brand, overdueOnly, search, db.customers]);
+  }, [tickets, brand, overdueOnly, closedOnly, search, db.customers]);
 
   /* Columns are stages, not statuses: one person does not think in eleven
      states. lib/stages.ts holds which statuses fold into which column. */
@@ -300,25 +313,43 @@ export function BoardView() {
 
   const clearFilterParams = () => router.push("/board");
 
-  const hasActiveFilters = Boolean(search || overdueOnly);
+  const hasActiveFilters = Boolean(search || overdueOnly || closedOnly);
+
+  const toggleClosed = () => {
+    const params = new URLSearchParams(searchParams);
+    if (closedOnly) params.delete("closed");
+    else {
+      params.set("closed", "1");
+      /* Overdue is a promise-date tier; a closed job owes nobody a promise. */
+      params.delete("overdue");
+    }
+    const qs = params.toString();
+    router.push(qs ? `/board?${qs}` : "/board");
+  };
 
   return (
     <div className="page space-y-4 sm:space-y-5">
       <PageHeader
         eyebrow="Counter"
         title="Repair board"
-        description="Every open job, oldest promise first. Overdue jobs carry the vermilion edge."
+        description={
+          closedOnly
+            ? "Closed jobs — unrepairable, returned unrepaired, released, and unclaimed."
+            : "Every open job, oldest promise first. Overdue jobs carry the vermilion edge."
+        }
         actions={
-          <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-            <TabsList>
-              <TabsTrigger value="board">
-                <Columns3 aria-hidden /> Board
-              </TabsTrigger>
-              <TabsTrigger value="table">
-                <Table2 aria-hidden /> Table
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          closedOnly ? null : (
+            <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+              <TabsList>
+                <TabsTrigger value="board">
+                  <Columns3 aria-hidden /> Board
+                </TabsTrigger>
+                <TabsTrigger value="table">
+                  <Table2 aria-hidden /> Table
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )
         }
       />
 
@@ -354,6 +385,17 @@ export function BoardView() {
           </Button>
         ) : null}
 
+        <Button
+          variant={closedOnly ? "default" : "outline"}
+          size="sm"
+          onClick={toggleClosed}
+          aria-pressed={closedOnly}
+        >
+          <Archive aria-hidden />
+          {closedOnly ? "Closed jobs" : "Show closed"}
+          {closedOnly ? <X aria-hidden /> : null}
+        </Button>
+
         {search ? (
           <span className="mono inline-flex items-center gap-1.5 rounded-full border border-rule bg-copy px-2.5 py-1 text-xs text-ink-soft">
             “{search}”
@@ -375,7 +417,9 @@ export function BoardView() {
         ) : null}
 
         <span className="mono ml-auto text-xs text-ink-faint">
-          {filtered.length} of {(tickets ?? []).length} open
+          {closedOnly
+            ? `${filtered.length} closed`
+            : `${filtered.length} of ${(tickets ?? []).length} open`}
         </span>
       </div>
 
@@ -451,7 +495,7 @@ export function BoardView() {
         </div>
       ) : null}
 
-      <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+      <Tabs value={effectiveView} onValueChange={(v) => setView(v as typeof view)}>
         <TabsContent value="board" className="mt-0">
           {loading && !tickets ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -586,16 +630,29 @@ export function BoardView() {
             {loading && !tickets ? (
               <LoadingRows rows={8} />
             ) : filtered.length === 0 ? (
-              <EmptyState
-                icon={Table2}
-                title="No jobs match these filters."
-                body="Clear a filter or start a new job order from the counter."
-                action={
-                  <Button asChild size="sm">
-                    <Link href="/intake">New job order</Link>
-                  </Button>
-                }
-              />
+              closedOnly ? (
+                <EmptyState
+                  icon={Archive}
+                  title="No closed jobs match these filters."
+                  body="Nothing has been marked unrepairable, returned unrepaired, released, or unclaimed yet."
+                  action={
+                    <Button variant="outline" size="sm" onClick={toggleClosed}>
+                      Back to open jobs
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={Table2}
+                  title="No jobs match these filters."
+                  body="Clear a filter or start a new job order from the counter."
+                  action={
+                    <Button asChild size="sm">
+                      <Link href="/intake">New job order</Link>
+                    </Button>
+                  }
+                />
+              )
             ) : (
               <PanelScroller>
                 <Table>
@@ -611,10 +668,10 @@ export function BoardView() {
                         />
                       </TableHead>
                       <TableHead>Ticket</TableHead>
-                      <TableHead>Stage</TableHead>
+                      <TableHead>{closedOnly ? "Outcome" : "Stage"}</TableHead>
                       <TableHead>Customer / device</TableHead>
                       <TableHead>Due</TableHead>
-                      <TableHead>In status</TableHead>
+                      <TableHead>{closedOnly ? "Closed" : "In status"}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -642,7 +699,11 @@ export function BoardView() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <StageChip status={ticket.status} />
+                            {closedOnly ? (
+                              <StatusChip status={ticket.status} />
+                            ) : (
+                              <StageChip status={ticket.status} />
+                            )}
                           </TableCell>
                           <TableCell>
                             <p className="truncate text-ink">{customer?.name ?? "Walk-in"}</p>
@@ -651,9 +712,15 @@ export function BoardView() {
                             </p>
                           </TableCell>
                           <TableCell>
-                            <span className={cn("mono text-xs font-semibold", aging.tier === "overdue" ? "text-stamp-ink" : "text-ink-soft")}>
-                              {agingLabel(ticket)}
-                            </span>
+                            {closedOnly ? (
+                              /* A closed job's promise date is settled — no one
+                                 is owed anything, so there is nothing to show. */
+                              <span className="mono text-xs text-ink-faint">—</span>
+                            ) : (
+                              <span className={cn("mono text-xs font-semibold", aging.tier === "overdue" ? "text-stamp-ink" : "text-ink-soft")}>
+                                {agingLabel(ticket)}
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="mono text-xs text-ink-faint">
                             {shortAge(ticket.statusChangedAt)}

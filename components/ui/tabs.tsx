@@ -32,7 +32,13 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list flex items-end gap-1 overflow-x-auto text-ink-soft group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:items-stretch",
+  /* `overflow-x-auto` alone forces `overflow-y` to compute to `auto` (a
+     `visible` cross axis is coerced), and the active tab's -mb-px border box
+     spills 1px past the list — so a phantom vertical scrollbar appears. `clip`
+     is the one value that co-exists with `auto` on the other axis; it stops
+     the scrollbar while still allowing horizontal scrolling, and only clips
+     that 1px border overhang, which sits on the bottom rule anyway. */
+  "group/tabs-list flex items-end gap-1 overflow-x-auto overflow-y-clip text-ink-soft group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:items-stretch group-data-[orientation=vertical]/tabs:overflow-visible",
   {
     variants: {
       variant: {

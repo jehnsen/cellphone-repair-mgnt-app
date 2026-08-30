@@ -585,17 +585,50 @@ export interface WarrantyTemplate {
   isDefault: boolean;
 }
 
-export interface NotificationTemplate {
+export type MessageChannel = "viber" | "sms" | "email";
+
+/**
+ * A lifecycle hook a template can be attached to. One template per hook per
+ * channel — `(channel, eventKey)` is unique.
+ */
+export type MessageEventKey =
+  | "ticket.received"
+  | "ticket.ready_for_pickup"
+  | "ticket.released"
+  | "ticket.unclaimed_30"
+  | "ticket.unclaimed_60"
+  | "ticket.unclaimed_90"
+  | "quote.sent"
+  | "warranty.expiring_soon"
+  | "installment.due_reminder"
+  | "installment.overdue";
+
+export interface MessageTemplate {
   id: ID;
-  key:
-    | "ready_for_pickup"
-    | "quote_sent"
-    | "overdue_followup"
-    | "unclaimed_notice";
-  name: string;
-  channel: "sms" | "viber";
-  /** Merge fields: {customer} {ticket_no} {claim_code} {device} {balance} {shop} */
+  channel: MessageChannel;
+  eventKey: MessageEventKey;
   body: string;
+  /** A retired template is inactive — there is no delete. */
+  active: boolean;
+  /** `{{merge_field}}` names parsed out of the body by the server. */
+  mergeFields: string[];
+}
+
+export type SettingType = "string" | "int" | "decimal" | "bool" | "json";
+export type SettingSource = "branch" | "global";
+
+/**
+ * One branch-scoped config entry, already resolved against the shop-wide
+ * default: `value` is what is in effect, `source` says whether this branch
+ * overrode it or is inheriting.
+ */
+export interface ShopSetting {
+  key: string;
+  value: string | number | boolean | null | Record<string, unknown> | unknown[];
+  type: SettingType;
+  source: SettingSource;
+  /** False when this branch is not allowed to override the key. */
+  overridable: boolean;
 }
 
 export interface ShopProfile {
@@ -615,6 +648,33 @@ export interface ShopProfile {
   receiptFooter: string;
   /** Days past the promised date before a ticket is flagged unclaimed. */
   unclaimedAfterDays: number;
+}
+
+/**
+ * The branch's own editable identity, as stored on the `branches` table —
+ * distinct from `ShopProfile` (a lossy view of the same row that receipts and
+ * POS read). This one round-trips every field the settings form edits, so
+ * nothing is dropped between load and save. `code` and `timezone` are shown
+ * but not editable here.
+ */
+export interface BranchProfile {
+  id: ID;
+  name: string;
+  code: string;
+  legalName: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  contactPhone: string;
+  contactEmail: string;
+  tin: string;
+  birPermitNo: string;
+  vatRegistered: boolean;
+  receiptHeaderText: string;
+  receiptFooterText: string;
+  timezone: string;
 }
 
 /* ── Cross-cutting ──────────────────────────────────────────────────── */
@@ -650,7 +710,7 @@ export interface Database {
   shifts: Shift[];
   services: ServiceItem[];
   warrantyTemplates: WarrantyTemplate[];
-  notificationTemplates: NotificationTemplate[];
+  messageTemplates: MessageTemplate[];
   notifications: AppNotification[];
   shop: ShopProfile;
 }

@@ -1,4 +1,5 @@
 import type {
+  BranchProfile,
   ConditionCheck,
   Customer,
   DefectArea,
@@ -9,6 +10,9 @@ import type {
   ID,
   InventoryItem,
   ItemClass,
+  MessageChannel,
+  MessageEventKey,
+  MessageTemplate,
   MovementReason,
   Payment,
   PaymentMethod,
@@ -18,7 +22,9 @@ import type {
   RootCause,
   Sale,
   SaleLineKind,
+  SettingType,
   Shift,
+  ShopSetting,
   StockMovement,
   Supplier,
   Ticket,
@@ -327,7 +333,87 @@ export interface ShopApi {
   getDeviceCatalog(): Promise<DeviceCatalog>;
 
   getDashboard(): Promise<DashboardSummary>;
+
+  /* ── Branch profile ──────────────────────────────────────────────
+     The caller's own branch row: name, address, contact, TIN, VAT
+     registration, and receipt header/footer. These are real columns on
+     `branches`, edited here rather than through key/value settings.
+     Requires `settings.manage`. */
+  getBranch(): Promise<BranchProfile>;
+  updateBranch(patch: BranchPatch): Promise<BranchProfile>;
+
+  /* ── Branch settings ──────────────────────────────────────────────
+     Key/value config for the caller's own branch, each entry already
+     resolved against the shop-wide default. Requires `settings.manage`. */
+  getSettings(): Promise<ShopSetting[]>;
+  /**
+   * Partial bulk upsert. A `null` value clears this branch's override and lets
+   * the entry fall back to the shop default; keys left out are untouched.
+   */
+  updateSettings(patch: SettingPatch): Promise<ShopSetting[]>;
+
+  /* ── Message templates ────────────────────────────────────────────
+     Viber/SMS/email copy with `{{merge_field}}` placeholders, keyed by
+     (channel, eventKey). Config, not history — retire by deactivating,
+     there is no delete. All require `settings.manage`. */
+  getMessageTemplates(): Promise<MessageTemplate[]>;
+  createMessageTemplate(input: NewMessageTemplateInput): Promise<MessageTemplate>;
+  /** Only `body` and `active` are editable — the identity is fixed on create. */
+  updateMessageTemplate(input: {
+    id: ID;
+    body?: string;
+    active?: boolean;
+  }): Promise<MessageTemplate>;
 }
+
+/**
+ * A key => value map. A value may also be the tagged form
+ * `{ value, type }` to pin the storage type instead of letting it be inferred.
+ * `null` removes this branch's override.
+ */
+export type SettingValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Record<string, unknown>
+  | unknown[];
+
+export type SettingPatch = Record<
+  string,
+  SettingValue | { value: SettingValue; type: SettingType }
+>;
+
+export interface NewMessageTemplateInput {
+  channel: MessageChannel;
+  eventKey: MessageEventKey;
+  body: string;
+  active?: boolean;
+}
+
+/**
+ * Every field the branch form can change. All optional — only what is passed
+ * is written. `code` and `timezone` are not editable through this screen.
+ */
+export type BranchPatch = Partial<
+  Pick<
+    BranchProfile,
+    | "name"
+    | "legalName"
+    | "addressLine1"
+    | "addressLine2"
+    | "city"
+    | "province"
+    | "postalCode"
+    | "contactPhone"
+    | "contactEmail"
+    | "tin"
+    | "birPermitNo"
+    | "vatRegistered"
+    | "receiptHeaderText"
+    | "receiptFooterText"
+  >
+>;
 
 /** Brand and model reference lists, for the intake form's pickers. */
 export interface DeviceCatalog {

@@ -5,9 +5,11 @@ import type {
   CustomerDeviceDto,
   CustomerDto,
   DeviceModelDto,
+  MessageTemplateDto,
   ProductDto,
   RepairTicketDto,
   ServiceDto,
+  SettingDto,
   TicketEventDto,
   TicketLineDto,
   TicketPhotoDto,
@@ -17,10 +19,13 @@ import type {
   RepairFindingDto,
 } from "@/lib/api/dto";
 import type {
+  BranchProfile,
   ConditionCheck,
   Customer,
   DeviceType,
   InventoryItem,
+  MessageEventKey,
+  MessageTemplate,
   PartConsumption,
   Payment,
   ProblemTag,
@@ -28,6 +33,7 @@ import type {
   Role,
   ServiceItem,
   ShopProfile,
+  ShopSetting,
   Ticket,
   TicketPhoto,
   TicketStatus,
@@ -473,6 +479,60 @@ export function toShopProfile(dto: BranchDto, fallback: ShopProfile): ShopProfil
     birPermitNo: dto.bir_permit_no ?? fallback.birPermitNo,
     receiptFooter: dto.receipt_footer_text ?? fallback.receiptFooter,
   };
+}
+
+export function toBranchProfile(dto: BranchDto): BranchProfile {
+  return {
+    id: dto.ulid,
+    name: dto.name ?? "",
+    code: dto.code ?? "",
+    legalName: dto.legal_name ?? "",
+    addressLine1: dto.address?.line1 ?? "",
+    addressLine2: dto.address?.line2 ?? "",
+    city: dto.address?.city ?? "",
+    province: dto.address?.province ?? "",
+    postalCode: dto.address?.postal_code ?? "",
+    contactPhone: dto.contact_phone ?? "",
+    contactEmail: dto.contact_email ?? "",
+    tin: dto.tin ?? "",
+    birPermitNo: dto.bir_permit_no ?? "",
+    vatRegistered: dto.vat_registered ?? false,
+    receiptHeaderText: dto.receipt_header_text ?? "",
+    receiptFooterText: dto.receipt_footer_text ?? "",
+    timezone: dto.timezone ?? "Asia/Manila",
+  };
+}
+
+export function toShopSetting(dto: SettingDto): ShopSetting {
+  return {
+    key: dto.key,
+    value: dto.value,
+    type: dto.type,
+    source: dto.source === "branch" ? "branch" : "global",
+    overridable: dto.overridable ?? true,
+  };
+}
+
+export function toMessageTemplate(dto: MessageTemplateDto): MessageTemplate {
+  return {
+    id: dto.ulid,
+    channel: dto.channel,
+    /* Passed through rather than narrowed: a hook added server-side should
+       still show, keyed by its raw name, instead of dropping out. */
+    eventKey: dto.event_key as MessageEventKey,
+    body: dto.body,
+    active: dto.is_active ?? true,
+    mergeFields: dto.merge_fields ?? mergeFieldsOf(dto.body),
+  };
+}
+
+/** Fallback when the server does not echo `merge_fields`: read them off the body. */
+export function mergeFieldsOf(body: string): string[] {
+  const found = new Set<string>();
+  for (const match of body.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)) {
+    if (match[1]) found.add(match[1]);
+  }
+  return [...found];
 }
 
 export function deviceModelLabel(dto: DeviceModelDto): string {
