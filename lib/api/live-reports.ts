@@ -1,5 +1,7 @@
 import type { HttpClient } from "@/lib/api/http";
-import type { ShopReports } from "@/lib/shop/contract";
+import type { RevenueSplit, ShopReports } from "@/lib/shop/contract";
+import { STATUS_META } from "@/lib/status";
+import type { TicketStatus } from "@/lib/types";
 
 /**
  * The server's own reporting. These are computed in SQL over the whole shop,
@@ -21,6 +23,49 @@ interface ReportPayload {
   rows?: Record<string, unknown>[];
 }
 
+/**
+ * The repair/handset/accessory split off one row.
+ *
+ * The server may name these columns per line kind, or not break sales down at
+ * all. When the split is absent, everything lands under `repair` so the three
+ * series still sum to the gross the same row reports — a chart that under-
+ * counts would be worse than one that attributes coarsely.
+ */
+function splitOf(row: Record<string, unknown>, gross: number): RevenueSplit {
+  const repair = row.repair_sales ?? row.service_sales ?? row.repair;
+  const handset = row.handset_sales ?? row.handset;
+  const accessory = row.accessory_sales ?? row.accessory;
+
+  if (repair === undefined && handset === undefined && accessory === undefined) {
+    return { repair: gross, handset: 0, accessory: 0 };
+  }
+
+  return {
+    repair: num(repair),
+    handset: num(handset),
+    accessory: num(accessory),
+  };
+}
+
+/** Sums a split across days, for a range total the server did not aggregate. */
+function addSplit(a: RevenueSplit, b: RevenueSplit): RevenueSplit {
+  return {
+    repair: a.repair + b.repair,
+    handset: a.handset + b.handset,
+    accessory: a.accessory + b.accessory,
+  };
+}
+
+/**
+ * Trusts the server's status only when it is one the board knows how to draw.
+ * Keyed off `STATUS_META` rather than a second copy of the list, so a new
+ * status is understood here the moment it is added to the domain.
+ */
+function toStatus(value: unknown, fallback: TicketStatus): TicketStatus {
+  const text = String(value ?? "");
+  return text in STATUS_META ? (text as TicketStatus) : fallback;
+}
+
 export function createReportsApi(client: HttpClient): ShopReports {
   const fetchReport = async (
     path: string,
@@ -39,16 +84,35 @@ export function createReportsApi(client: HttpClient): ShopReports {
   return {
     async getSalesReport(range) {
       const payload = await fetchReport("/reports/sales", range);
-      return {
-        grossSales: num(payload.aggregate?.gross_sales),
-        discountTotal: num(payload.aggregate?.discount_total),
-        vatTotal: num(payload.aggregate?.vat_total),
-        saleCount: num(payload.aggregate?.sale_count),
-        byDay: (payload.rows ?? []).map((row) => ({
+
+      const byDay = (payload.rows ?? []).map((row) => {
+        const grossSales = num(row.gross_sales);
+        return {
           date: String(row.business_date ?? ""),
           saleCount: num(row.sale_count),
-          grossSales: num(row.gross_sales),
-        })),
+          grossSales,
+          ...splitOf(row, grossSales),
+        };
+      });
+
+      const aggregate = payload.aggregate ?? {};
+      const grossSales = num(aggregate.gross_sales);
+      /* Prefer the server's own split; fall back to summing the days it
+         returned so the tiles and the chart always tell the same story. */
+      const totals =
+        aggregate.repair_sales !== undefined ||
+        aggregate.handset_sales !== undefined ||
+        aggregate.accessory_sales !== undefined
+          ? splitOf(aggregate, grossSales)
+          : byDay.reduce(addSplit, { repair: 0, handset: 0, accessory: 0 });
+
+      return {
+        grossSales,
+        discountTotal: num(aggregate.discount_total),
+        vatTotal: num(aggregate.vat_total),
+        saleCount: num(aggregate.sale_count),
+        totals,
+        byDay,
       };
     },
 
@@ -108,6 +172,14 @@ export function createReportsApi(client: HttpClient): ShopReports {
         ticketId: String(row.ulid ?? ""),
         ticketNo: String(row.ticket_number ?? ""),
         daysUnclaimed: num(row.days_unclaimed),
+        customerName: String(row.customer_name ?? row.customer ?? "Walk-in"),
+        device: [row.device_brand ?? row.brand, row.device_model ?? row.model]
+          .filter(Boolean)
+          .join(" "),
+        /* These are the units nobody collected, so a row with no usable
+           status is far likelier to be waiting than released. */
+        status: toStatus(row.status, "ready_for_pickup"),
+        balance: num(row.balance ?? row.balance_due),
       }));
     },
   };

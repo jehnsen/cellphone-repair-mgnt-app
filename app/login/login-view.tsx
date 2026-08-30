@@ -167,7 +167,7 @@ export function LoginView() {
 
           <div className="mt-9">
             <p className="label-pad">{now ? formatDate(now) : " "}</p>
-            <h1 className="display-lg mt-1.5">Good {greeting(now)}.</h1>
+            {/* <h1 className="display-lg mt-1.5">Good {greeting(now)}.</h1> */}
             <p className="mt-2 text-sm text-ink-soft">
               Sign in to open the shop for the day.
             </p>
@@ -240,17 +240,6 @@ export function LoginView() {
               <ArrowRight aria-hidden />
             </Button>
           </form>
-
-          {/* This prototype has no real auth — the fields come pre-filled with
-              a seeded identity. Say so plainly rather than implying a login
-              wall that is not there. */}
-          <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-ink-faint">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>
-              Demo sign-in — pre-filled with a seeded account. It does not
-              verify anyone, and every screen is reachable without it.
-            </span>
-          </p>
         </div>
       </main>
     </div>

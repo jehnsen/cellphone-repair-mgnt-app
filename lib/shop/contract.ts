@@ -198,13 +198,30 @@ export interface ReportRange {
   days?: number;
 }
 
+/**
+ * Revenue split by what was sold. The reports screen plots these as three
+ * series, so the split has to come from the same SQL as the totals — deriving
+ * it from cached sale lines is what this interface exists to avoid.
+ *
+ * A server that does not break sales down this way reports the whole day under
+ * `repair` and the chart still sums correctly; see `splitOf` in
+ * `lib/api/live-reports.ts`.
+ */
+export interface RevenueSplit {
+  repair: number;
+  handset: number;
+  accessory: number;
+}
+
 export interface ShopReports {
   getSalesReport(range?: ReportRange): Promise<{
     grossSales: number;
     discountTotal: number;
     vatTotal: number;
     saleCount: number;
-    byDay: { date: string; saleCount: number; grossSales: number }[];
+    /** Totals for the whole range, split the same way as `byDay`. */
+    totals: RevenueSplit;
+    byDay: ({ date: string; saleCount: number; grossSales: number } & RevenueSplit)[];
   }>;
 
   getMarginReport(range?: ReportRange): Promise<{
@@ -238,7 +255,17 @@ export interface ShopReports {
   >;
 
   getUnclaimedAging(): Promise<
-    { ticketId: string; ticketNo: string; daysUnclaimed: number }[]
+    {
+      ticketId: string;
+      ticketNo: string;
+      daysUnclaimed: number;
+      /* Enough to render the row without a second lookup. The browser cache
+         holds only what has been fetched, and this report is the whole shop. */
+      customerName: string;
+      device: string;
+      status: TicketStatus;
+      balance: number;
+    }[]
   >;
 }
 

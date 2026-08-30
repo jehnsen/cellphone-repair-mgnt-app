@@ -24,13 +24,22 @@ import {
   TableNumeric,
   TableRow,
 } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/states";
-import { useShop } from "@/lib/shop/store";
-import { itemStock } from "@/lib/shop/queries";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useReport } from "@/lib/shop/store";
 import { STAGE_META, stageOf } from "@/lib/stages";
-import { count, formatDate, manilaDayKey, peso } from "@/lib/format";
+import { count, formatDate, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Sale } from "@/lib/types";
+
+/**
+ * Every figure on this screen is computed by the server, in SQL, over the
+ * whole shop — see `lib/api/live-reports.ts`.
+ *
+ * Deliberately *not* derived from `db`: the browser cache holds only what has
+ * been fetched and is capped at 40 pages per list, so a cache-derived total
+ * silently goes wrong once the shop outgrows it. A report that fails loudly is
+ * worth more than one that quietly under-counts.
+ */
 
 const RANGES = [
   { key: "7", label: "Last 7 days", days: 7 },
@@ -46,12 +55,6 @@ const SERIES = [
   { key: "handset", label: "Handsets", token: "var(--series-handset)" },
   { key: "accessory", label: "Accessories", token: "var(--series-accessory)" },
 ] as const;
-
-function saleBucket(sale: Sale): "repair" | "handset" | "accessory" {
-  if (sale.lines.some((line) => line.kind === "handset")) return "handset";
-  if (sale.lines.some((line) => line.kind === "service")) return "repair";
-  return "accessory";
-}
 
 function toCsv(rows: Record<string, string | number>[]): string {
   if (!rows.length) return "";
@@ -77,113 +80,31 @@ function downloadCsv(filename: string, rows: Record<string, string | number>[]) 
 }
 
 export function ReportsView() {
-  const { db } = useShop();
   const [range, setRange] = useState<RangeKey>("30");
   const [showTable, setShowTable] = useState(false);
 
   const days = RANGES.find((r) => r.key === range)!.days;
 
-  const since = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - (days - 1));
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [days]);
+  /* Three independent reports: each renders as it lands, and one failing
+     endpoint leaves the other two on screen. */
+  const sales = useReport((reports) => reports.getSalesReport({ days }), [days]);
+  const margin = useReport((reports) => reports.getMarginReport({ days }), [days]);
+  const valuation = useReport((reports) => reports.getInventoryValuation());
+  const unclaimed = useReport((reports) => reports.getUnclaimedAging());
 
-  const sales = useMemo(
-    () => db.sales.filter((sale) => new Date(sale.soldAt) >= since),
-    [db.sales, since],
-  );
-
-  const tickets = useMemo(
-    () => db.tickets.filter((ticket) => new Date(ticket.createdAt) >= since),
-    [db.tickets, since],
-  );
-
-  /* One row per day, one column per revenue line. */
-  const trend = useMemo(() => {
-    const buckets = new Map<
-      string,
-      { day: string; repair: number; handset: number; accessory: number }
-    >();
-    for (let i = 0; i < days; i += 1) {
-      const d = new Date(since);
-      d.setDate(d.getDate() + i);
-      buckets.set(manilaDayKey(d), {
-        day: manilaDayKey(d),
-        repair: 0,
-        handset: 0,
-        accessory: 0,
-      });
-    }
-    sales.forEach((sale) => {
-      const row = buckets.get(manilaDayKey(sale.soldAt));
-      if (row) row[saleBucket(sale)] += sale.totalDue;
-    });
-    return [...buckets.values()];
-  }, [sales, since, days]);
-
-  const totals = useMemo(() => {
-    const base = { repair: 0, handset: 0, accessory: 0 };
-    sales.forEach((sale) => {
-      base[saleBucket(sale)] += sale.totalDue;
-    });
-    return base;
-  }, [sales]);
-
-  const grossSales = totals.repair + totals.handset + totals.accessory;
-
-  const margin = useMemo(
-    () =>
-      sales.reduce(
-        (sum, sale) =>
-          sum +
-          sale.lines.reduce(
-            (lineSum, line) => lineSum + (line.unitPrice - line.unitCost) * line.quantity,
-            0,
-          ),
-        0,
-      ),
-    [sales],
-  );
-
-  const valuation = useMemo(() => {
-    const byClass = { handset: 0, accessory: 0, spare_part: 0 };
-    db.items.forEach((item) => {
-      if (item.itemClass === "handset") {
-        byClass.handset += (item.units ?? [])
-          .filter((unit) => unit.status === "in_stock")
-          .reduce((sum, unit) => sum + unit.cost, 0);
-      } else {
-        byClass[item.itemClass] += itemStock(db, item.id) * item.unitCost;
-      }
-    });
-    return byClass;
-  }, [db]);
-
-  const unclaimed = useMemo(() => {
-    const now = Date.now();
-    return db.tickets
-      .filter((t) => t.status === "unclaimed" || t.status === "ready_for_pickup")
-      .map((ticket) => ({
-        ticket,
-        ageDays: Math.floor(
-          (now - new Date(ticket.statusChangedAt).getTime()) / 86_400_000,
-        ),
-      }))
-      .filter((row) => row.ageDays >= db.shop.unclaimedAfterDays / 2)
-      .sort((a, b) => b.ageDays - a.ageDays);
-  }, [db.tickets, db.shop.unclaimedAfterDays]);
+  const trend = sales.data?.byDay ?? [];
+  const totals = sales.data?.totals;
+  const grossSales = sales.data?.grossSales ?? 0;
 
   const exportSales = () =>
     downloadCsv(
       `sales-${range}d.csv`,
       trend.map((row) => ({
-        date: row.day,
+        date: row.date,
         repairs: row.repair.toFixed(2),
         handsets: row.handset.toFixed(2),
         accessories: row.accessory.toFixed(2),
-        total: (row.repair + row.handset + row.accessory).toFixed(2),
+        total: row.grossSales.toFixed(2),
       })),
     );
 
@@ -224,7 +145,12 @@ export function ReportsView() {
         >
           <Table2 aria-hidden /> {showTable ? "Hide" : "Show"} table
         </Button>
-        <Button variant="outline" size="sm" onClick={exportSales}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={exportSales}
+          disabled={!trend.length}
+        >
           <Download aria-hidden /> Export CSV
         </Button>
       </div>
@@ -234,29 +160,40 @@ export function ReportsView() {
         <StatTile
           label="Gross sales"
           value={peso(grossSales, { whole: true })}
-          hint={`${count(sales.length)} sale${sales.length === 1 ? "" : "s"}`}
+          hint={
+            sales.data
+              ? `${count(sales.data.saleCount)} sale${sales.data.saleCount === 1 ? "" : "s"}`
+              : undefined
+          }
+          state={sales}
         />
         <StatTile
           label="Gross margin"
-          value={peso(margin, { whole: true })}
+          value={peso(margin.data?.grossMargin ?? 0, { whole: true })}
           hint={
-grossSales > 0
-              ? `${Math.round((margin / grossSales) * 100)}% of sales`
-              : "No sales in this range"
+            margin.data && margin.data.revenue > 0
+              ? `${Math.round((margin.data.grossMargin / margin.data.revenue) * 100)}% of revenue`
+              : "No revenue in this range"
           }
+          state={margin}
         />
         <StatTile
-          label="Jobs taken in"
-          value={count(tickets.length)}
-          hint={`${count(tickets.filter((t) => stageOf(t.status) === "closed").length)} closed`}
+          label="VAT collected"
+          value={peso(sales.data?.vatTotal ?? 0, { whole: true })}
+          hint={
+            sales.data
+              ? `${peso(sales.data.discountTotal, { whole: true })} discounted`
+              : undefined
+          }
+          state={sales}
         />
         <StatTile
           label="Stock at cost"
-          value={peso(
-            valuation.handset + valuation.accessory + valuation.spare_part,
-            { whole: true },
-          )}
-          hint="Handsets, accessories, parts"
+          value={peso(valuation.data?.totalCostValue ?? 0, { whole: true })}
+          hint={
+            valuation.data ? `${count(valuation.data.skuCount)} SKUs` : undefined
+          }
+          state={valuation}
         />
       </div>
 
@@ -280,7 +217,11 @@ grossSales > 0
         </PanelHeader>
 
         <PanelBody>
-          {grossSales === 0 ? (
+          {sales.error ? (
+            <ErrorState error={sales.error} onRetry={sales.refetch} />
+          ) : sales.loading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : grossSales === 0 ? (
             <EmptyState
               icon={TrendingUp}
               title="No sales in this range."
@@ -296,7 +237,7 @@ grossSales > 0
                     vertical={false}
                   />
                   <XAxis
-                    dataKey="day"
+                    dataKey="date"
                     tickFormatter={(value: string) => value.slice(5)}
                     tick={{ fill: "var(--ink-faint)", fontSize: 11 }}
                     tickLine={false}
@@ -337,7 +278,7 @@ grossSales > 0
           )}
         </PanelBody>
 
-        {showTable ? (
+        {showTable && trend.length ? (
           <PanelScroller className="border-t border-rule">
             <Table>
               <TableHeader>
@@ -351,15 +292,15 @@ grossSales > 0
               </TableHeader>
               <TableBody>
                 {trend
-                  .filter((row) => row.repair + row.handset + row.accessory > 0)
+                  .filter((row) => row.grossSales > 0)
                   .map((row) => (
-                    <TableRow key={row.day}>
-                      <TableCell className="mono text-xs">{row.day}</TableCell>
+                    <TableRow key={row.date}>
+                      <TableCell className="mono text-xs">{row.date}</TableCell>
                       <TableNumeric>{peso(row.repair)}</TableNumeric>
                       <TableNumeric>{peso(row.handset)}</TableNumeric>
                       <TableNumeric>{peso(row.accessory)}</TableNumeric>
                       <TableNumeric className="font-semibold">
-                        {peso(row.repair + row.handset + row.accessory)}
+                        {peso(row.grossSales)}
                       </TableNumeric>
                     </TableRow>
                   ))}
@@ -372,38 +313,105 @@ grossSales > 0
       {/* Valuation: three numbers, so tiles rather than a 3-slice pie. */}
       <Panel>
         <PanelHeader>
-          <PanelTitle>Inventory valuation</PanelTitle>
+          <PanelTitle>Sales by line, this range</PanelTitle>
         </PanelHeader>
-        <ul className="divide-y divide-rule-soft">
-          {(
-            [
-              ["Handsets", valuation.handset, "var(--series-handset)"],
-              ["Accessories", valuation.accessory, "var(--series-accessory)"],
-              ["Spare parts", valuation.spare_part, "var(--series-repair)"],
-            ] as const
-          ).map(([label, value, token]) => (
-            <li key={label} className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ background: token }}
-                aria-hidden
-              />
-              <span className="flex-1 text-sm text-ink">{label}</span>
-              <span className="mono text-sm font-medium text-ink">
-                {peso(value, { whole: true })}
+        {sales.error ? (
+          <PanelBody>
+            <ErrorState error={sales.error} onRetry={sales.refetch} />
+          </PanelBody>
+        ) : (
+          <ul className="divide-y divide-rule-soft">
+            {SERIES.map((series) => (
+              <li
+                key={series.key}
+                className="flex items-center gap-3 px-3 py-2.5 sm:px-4"
+              >
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: series.token }}
+                  aria-hidden
+                />
+                <span className="flex-1 text-sm text-ink">{series.label}</span>
+                <span className="mono text-sm font-medium text-ink">
+                  {sales.loading ? (
+                    <Skeleton className="h-4 w-16" />
+                  ) : (
+                    peso(totals?.[series.key] ?? 0, { whole: true })
+                  )}
+                </span>
+              </li>
+            ))}
+            <li className="flex items-center gap-3 border-t border-rule px-3 py-2.5 sm:px-4">
+              <span className="flex-1 text-sm font-semibold text-ink">Gross sales</span>
+              <span className="mono text-sm font-semibold text-ink">
+                {sales.loading ? (
+                  <Skeleton className="h-4 w-20" />
+                ) : (
+                  peso(grossSales, { whole: true })
+                )}
               </span>
             </li>
-          ))}
-          <li className="flex items-center gap-3 border-t border-rule px-3 py-2.5 sm:px-4">
-            <span className="flex-1 text-sm font-semibold text-ink">Total at cost</span>
-            <span className="mono text-sm font-semibold text-ink">
-              {peso(
-                valuation.handset + valuation.accessory + valuation.spare_part,
-                { whole: true },
-              )}
+          </ul>
+        )}
+      </Panel>
+
+      {/* Inventory valuation, straight off the server's own walk of stock. */}
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Inventory valuation</PanelTitle>
+          {valuation.data ? (
+            <span className="mono ml-auto text-xs text-ink-faint">
+              {count(valuation.data.skuCount)} SKUs
             </span>
-          </li>
-        </ul>
+          ) : null}
+        </PanelHeader>
+
+        {valuation.error ? (
+          <PanelBody>
+            <ErrorState error={valuation.error} onRetry={valuation.refetch} />
+          </PanelBody>
+        ) : valuation.loading ? (
+          <LoadingRows rows={4} />
+        ) : !valuation.data?.rows.length ? (
+          <EmptyState
+            icon={Table2}
+            title="Nothing in stock to value."
+            body="Receive stock against a product and it will be valued here."
+          />
+        ) : (
+          <PanelScroller>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-right">On hand</TableHead>
+                  <TableHead className="text-right">At cost</TableHead>
+                  <TableHead className="text-right">At retail</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {valuation.data.rows.slice(0, 50).map((row) => (
+                  <TableRow key={row.product}>
+                    <TableCell className="truncate">{row.product}</TableCell>
+                    <TableNumeric>{count(row.onHand)}</TableNumeric>
+                    <TableNumeric>{peso(row.costValue)}</TableNumeric>
+                    <TableNumeric>{peso(row.retailValue)}</TableNumeric>
+                  </TableRow>
+                ))}
+                <TableRow>
+                  <TableCell className="font-semibold">Total</TableCell>
+                  <TableCell />
+                  <TableNumeric className="font-semibold">
+                    {peso(valuation.data.totalCostValue)}
+                  </TableNumeric>
+                  <TableNumeric className="font-semibold">
+                    {peso(valuation.data.totalRetailValue)}
+                  </TableNumeric>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </PanelScroller>
+        )}
       </Panel>
 
       {/* Aging units: a table, because every row needs acting on. */}
@@ -411,16 +419,24 @@ grossSales > 0
         <PanelHeader>
           <TriangleAlert className="size-3.5 text-flag-ink" aria-hidden />
           <PanelTitle>Aging and unclaimed units</PanelTitle>
-          <span className="mono ml-auto text-xs text-ink-faint">
-            {unclaimed.length} unit{unclaimed.length === 1 ? "" : "s"}
-          </span>
+          {unclaimed.data ? (
+            <span className="mono ml-auto text-xs text-ink-faint">
+              {unclaimed.data.length} unit{unclaimed.data.length === 1 ? "" : "s"}
+            </span>
+          ) : null}
         </PanelHeader>
 
-        {unclaimed.length === 0 ? (
+        {unclaimed.error ? (
+          <PanelBody>
+            <ErrorState error={unclaimed.error} onRetry={unclaimed.refetch} />
+          </PanelBody>
+        ) : unclaimed.loading ? (
+          <LoadingRows rows={4} />
+        ) : !unclaimed.data?.length ? (
           <EmptyState
             icon={TriangleAlert}
             title="Nothing is sitting too long."
-            body="Units waiting past half the unclaimed window will appear here."
+            body="Units waiting past the shop's unclaimed window will appear here."
           />
         ) : (
           <PanelScroller>
@@ -436,34 +452,28 @@ grossSales > 0
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {unclaimed.slice(0, 25).map(({ ticket, ageDays }) => {
-                  const customer = db.customers.find((c) => c.id === ticket.customerId);
-                  const critical = ageDays >= db.shop.unclaimedAfterDays;
-                  return (
-                    <TableRow key={ticket.id}>
-                      <TableCell className="mono text-xs font-semibold">
-                        {ticket.ticketNo}
-                      </TableCell>
-                      <TableCell className="truncate">{customer?.name ?? "Walk-in"}</TableCell>
-                      <TableCell className="truncate text-ink-soft">
-                        {ticket.device.brand} {ticket.device.model}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={critical ? "stamp" : "flag"}>
-                          {STAGE_META[stageOf(ticket.status)].label}
-                        </Badge>
-                      </TableCell>
-                      <TableNumeric
-                        className={cn("font-semibold", critical ? "text-stamp-ink" : "text-flag-ink")}
-                      >
-                        {ageDays}d
-                      </TableNumeric>
-                      <TableNumeric>
-                        {ticket.balance > 0 ? peso(ticket.balance) : "—"}
-                      </TableNumeric>
-                    </TableRow>
-                  );
-                })}
+                {unclaimed.data.slice(0, 25).map((row) => (
+                  <TableRow key={row.ticketId || row.ticketNo}>
+                    <TableCell className="mono text-xs font-semibold">
+                      {row.ticketNo}
+                    </TableCell>
+                    <TableCell className="truncate">{row.customerName}</TableCell>
+                    <TableCell className="truncate text-ink-soft">
+                      {row.device || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="flag">
+                        {STAGE_META[stageOf(row.status)].label}
+                      </Badge>
+                    </TableCell>
+                    <TableNumeric className="font-semibold text-flag-ink">
+                      {row.daysUnclaimed}d
+                    </TableNumeric>
+                    <TableNumeric>
+                      {row.balance > 0 ? peso(row.balance) : "—"}
+                    </TableNumeric>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </PanelScroller>
@@ -479,16 +489,31 @@ function StatTile({
   label,
   value,
   hint,
+  state,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** Loading and failure are shown in the tile, never as a confident zero. */
+  state?: { loading: boolean; error: Error | null };
 }) {
   return (
     <div className="rounded-lg border border-rule bg-copy p-3 shadow-panel sm:p-4">
       <p className="label-pad">{label}</p>
-      <p className="figure mt-1.5 text-2xl">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-ink-soft">{hint}</p> : null}
+      {state?.loading ? (
+        <Skeleton className="mt-1.5 h-8 w-28" />
+      ) : state?.error ? (
+        <p className="figure mt-1.5 text-2xl text-ink-faint" title={state.error.message}>
+          —
+        </p>
+      ) : (
+        <p className="figure mt-1.5 text-2xl">{value}</p>
+      )}
+      {state?.error ? (
+        <p className="mt-1 text-xs text-stamp-ink">Could not be loaded.</p>
+      ) : hint && !state?.loading ? (
+        <p className="mt-1 text-xs text-ink-soft">{hint}</p>
+      ) : null}
     </div>
   );
 }

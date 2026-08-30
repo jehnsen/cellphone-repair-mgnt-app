@@ -22,45 +22,96 @@ things `tsc` cannot, notably a `useSearchParams()` call that isn't wrapped in
 Kill stray dev servers before screenshotting or driving the app; an old server
 on port 3000 will happily serve a build from before your changes.
 
+The app needs the API up and a session in `localStorage` to render anything —
+without a token it redirects to `/login`, and without a reachable API it shows
+the "could not reach the shop server" panel. To drive it headless, seed
+`jo.auth.token` / `jo.auth.user` / `jo.auth.branch` on the app origin *before*
+navigating (see `lib/api/session.ts` for the shapes). A small stub server that
+answers the `{data, meta}` envelope is enough to exercise a screen, and is the
+only way to see the loading, empty, and error states on demand.
+
 ## What this is
 
-A prototype front end for a single-branch Philippine cellphone repair shop:
-intake → repair board → release, plus POS, inventory, customers, and reports.
+A front end for a single-branch Philippine cellphone repair shop: intake →
+repair board → release, plus POS, inventory, customers, and reports.
 
-**There is no backend.** The entire shop is generated in the browser and lives
-in a reducer. Nothing persists across a reload except the `jo.*` localStorage
-keys (chosen user, rail collapsed state).
+**The backend is a Laravel API.** There is no sample-data mode and no seeded
+rows: if a record is on screen, it was read from the shop database. Point the
+app at it with `NEXT_PUBLIC_API_URL` (see `.env.example`); the default is
+`http://127.0.0.1:8000/api/v1`. **The API must be running** or the app renders
+its "could not reach the shop server" state.
 
-**There is no authentication.** `/login` selects an identity; it does not verify
-anyone, and every route is reachable by typing its URL. Don't add UI that
-implies otherwise — the login screen carries an explicit disclaimer, and
-`lib/roles.ts` documents why its permission matrix is currently dormant.
+**Authentication is real.** `POST /auth/token` issues a bearer token, kept in
+`localStorage` under `jo.auth.*` along with the signed-in user and their branch
+(`lib/api/session.ts`). A 401 anywhere clears the session and drops the user at
+`/login`. `lib/roles.ts` is live, not dormant — the nav rail filters on `can()`.
+
+Two things to know about how permissions behave in practice:
+
+- They are **not a security boundary here**. Every check runs in the browser and
+  every route is still reachable by URL. The server is what enforces access; a
+  403 is rendered as a plain "not permitted" state, not an error.
+- Sign-in **falls back to a minimal `cashier` identity** when `/users` is
+  unreadable (a cashier or technician cannot list staff). That is deliberate, but
+  it means an owner can lose Settings from the rail after a transient failure.
 
 ## Architecture
 
-### The mock backend seam
+### The API seam
 
-`lib/mock/` is deliberately shaped like a network so it can be swapped for a
-real one without touching screens:
+`lib/shop/contract.ts` is the interface every screen codes against; nothing in
+`app/` or `components/` knows about HTTP. Two implementations compose into one
+object in `lib/api/shop-api.ts`:
 
-- **`seed.ts`** — builds the whole database deterministically (seeded RNG),
-  relative to `now`. Exports `OWNER_ID`.
-- **`api.ts`** — `ShopApi`, ~30 methods. Every call `await wait()`s (simulated
-  latency) and can throw `ApiError` when the failure-rate demo control is on.
-  This interface is the contract: a fetch client implements it and screens are
-  unchanged.
-- **`reducer.ts`** — one reducer over the whole `Database`. The API decides
-  *what* changed; the reducer only decides where it lands.
-- **`store.tsx`** — `ShopProvider` plus the three hooks screens use:
-  `useShop()`, `useQuery()`, `useMutation()`. A `version` counter bumps on every
-  dispatch so `useQuery` refetches without manual wiring.
+- **`live-*.ts`** — the real client. `live-api.ts` (tickets, customers, users),
+  `live-commerce.ts` (inventory, sales, shifts), `live-settings.ts` (branch,
+  settings, message templates), `live-reports.ts` (the server's aggregates).
+- **`unavailable.ts`** — the floor beneath them, so the object is always
+  complete. Whatever the API has not built yet **reads empty and writes throw**
+  `NOT_IMPLEMENTED` naming the missing endpoint. It never invents a row.
 
-**Seeding is client-only** (inside `useEffect`), because seed dates are relative
-to `now` and generating them during SSR guarantees a hydration mismatch. This is
-why `useShop().ready` exists and why page HTML fetched with `curl` shows a
-loading state rather than content — that is expected, not a bug. Anything else
-deriving from `new Date()` at render time needs the same treatment (see the
-greeting in `app/login/login-view.tsx`).
+`lib/api/config.ts` lists what is still missing in `PENDING_CONTEXTS`, and the
+Settings screen shows that list to the user. Keep it honest when an endpoint
+ships. `README.md` has the four-step "wiring up a new endpoint" recipe.
+
+- **`http.ts`** — the only place that knows about HTTP: bearer token, the
+  `{data, meta, links}` envelope, `Idempotency-Key` on writes, `getAll()` to page
+  a list to completion (capped at 40 pages), a 30s GET cache, and request
+  coalescing. **Any write invalidates the whole read cache.**
+- **`reducer.ts`** — one reducer over `Database`, a read-through cache of what
+  has been fetched. It exists so a screen can resolve a ticket's customer
+  without another round trip. It is *not* a source of truth.
+- **`store.tsx`** — `ShopProvider` plus the hooks screens use: `useShop()`,
+  `useQuery()`, `useMutation()`, and `useReport()`. A `version` counter bumps on
+  every write so `useQuery` refetches without manual wiring.
+
+**Fetching is client-only**, because there is no token during SSR. This is why
+`useShop().ready` exists and why page HTML fetched with `curl` shows a loading
+state rather than content — expected, not a bug. Anything deriving from
+`new Date()` at render time needs the same treatment (see the greeting in
+`app/login/login-view.tsx`).
+
+### Reports come from the server, never from the cache
+
+`db` holds only what this browser has fetched, and `getAll()` stops at 40 pages.
+Any total derived from it silently goes wrong once the shop outgrows that — the
+failure mode is a plausible number that is quietly too low.
+
+So the figures of record are computed in SQL and read through **`ShopReports`**
+(`lib/shop/contract.ts`, implemented by `lib/api/live-reports.ts`), reached with
+the **`useReport()`** hook rather than `useQuery()`. `app/reports` uses it
+exclusively and touches `db` nowhere. Keep it that way: a report that fails
+loudly beats one that under-counts.
+
+The server's payloads are `{ aggregate?, rows }` with numbers as decimal
+strings; the mappers coerce and tolerate missing columns (a sales row with no
+per-line split reports the whole day under `repair`, so the series still sum to
+the gross).
+
+The one deliberate exception is the day sheet's counts in `shop-api.ts`, which
+re-read rather than counting the cache — overdue, ready, and drawer are the
+numbers the shop is run on, and a count that lags an action is worse than a slow
+one.
 
 ### Domain rules that live in one place
 
@@ -80,11 +131,18 @@ Don't reimplement these inline:
 
 Routes live in `app/`. Most `page.tsx` files are 5-line wrappers around a
 sibling `*-view.tsx` client component; `app/board` and `app/release` add a
-`<Suspense>` boundary because their views call `useSearchParams()`.
-`app/settings` is still a `StageStub` — the only unbuilt screen.
+`<Suspense>` boundary because their views call `useSearchParams()`. Every
+screen is built; `/specimen` is a design-system reference page, not a shop
+screen.
 
 Cross-screen deep links already in use, worth preserving:
 `/board?q=`, `/board?overdue=1`, `/release?code=<ticketNo|claimCode|IMEI>`.
+
+Every list screen owes the user three states — use `components/ui/states.tsx`
+(`EmptyState`, `ErrorState`, `LoadingRows`) rather than ad-hoc markup, and give
+`EmptyState` a body that says what to do next, never "No data found". A failed
+read shows the server's own message; it must not fall back to a zero that reads
+as a real figure.
 
 ### Design system
 

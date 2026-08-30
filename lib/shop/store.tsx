@@ -15,6 +15,7 @@ import { API_BASE_URL } from "@/lib/api/config";
 import { HttpClient } from "@/lib/api/http";
 import { ApiError } from "@/lib/api/errors";
 import { bootstrapShop, createShopApi } from "@/lib/api/shop-api";
+import { createReportsApi } from "@/lib/api/live-reports";
 import { signIn as signInRemote, signOutRemote } from "@/lib/api/live-api";
 import { toUser } from "@/lib/api/mappers";
 import {
@@ -23,7 +24,7 @@ import {
   saveSession,
 } from "@/lib/api/session";
 import { EMPTY_DB, shopReducer, type ShopAction } from "@/lib/shop/reducer";
-import type { ShopApi } from "@/lib/shop/contract";
+import type { ShopApi, ShopReports } from "@/lib/shop/contract";
 import type { BranchDto } from "@/lib/api/dto";
 import type { Database, Permission, Role, User } from "@/lib/types";
 
@@ -41,6 +42,10 @@ export type AuthState = "loading" | "signed-out" | "signed-in" | "unreachable";
 interface ShopContextValue {
   db: Database;
   api: ShopApi;
+  /* The server's own aggregates. Separate from `api` because these are
+     computed in SQL over the whole shop and must never be re-derived from
+     `db`, which only holds what this browser happens to have fetched. */
+  reports: ShopReports;
   /** Bumped on every write so `useQuery` refetches without manual wiring. */
   version: number;
   ready: boolean;
@@ -102,6 +107,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const client = useMemo(() => new HttpClient(), []);
+
+  const reports = useMemo(() => createReportsApi(client), [client]);
 
   const api = useMemo(
     () =>
@@ -233,6 +240,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     () => ({
       db,
       api,
+      reports,
       version,
       ready,
       apiBaseUrl: API_BASE_URL,
@@ -246,7 +254,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       role: user.role,
       can: (permission: Permission) => can(user.role, permission),
     }),
-    [db, api, version, ready, auth, authError, warnings, signIn, signOut, retry, user],
+    [db, api, reports, version, ready, auth, authError, warnings, signIn, signOut, retry, user],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
@@ -273,7 +281,31 @@ export function useQuery<T>(
   run: (api: ShopApi) => Promise<T>,
   deps: React.DependencyList = [],
 ): QueryState<T> {
-  const { api, version, ready } = useShop();
+  const { api } = useShop();
+  return useSource(api, run, deps);
+}
+
+/**
+ * The same three states, over the server's reporting instead of `ShopApi`.
+ *
+ * Kept as its own hook so a screen cannot reach the aggregates through the
+ * ordinary data path by accident — asking for a report is a deliberate act.
+ */
+export function useReport<T>(
+  run: (reports: ShopReports) => Promise<T>,
+  deps: React.DependencyList = [],
+): QueryState<T> {
+  const { reports } = useShop();
+  return useSource(reports, run, deps);
+}
+
+/** Shared body: fetch on mount, refetch on write, drop a late response. */
+function useSource<TSource, T>(
+  source: TSource,
+  run: (source: TSource) => Promise<T>,
+  deps: React.DependencyList,
+): QueryState<T> {
+  const { version, ready } = useShop();
   const [data, setData] = useState<T | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -288,7 +320,7 @@ export function useQuery<T>(
     setError(null);
 
     runRef
-      .current(api)
+      .current(source)
       .then((result) => {
         if (!cancelled) {
           setData(result);
@@ -306,7 +338,7 @@ export function useQuery<T>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, ready, version, nonce, ...deps]);
+  }, [source, ready, version, nonce, ...deps]);
 
   const refetch = useCallback(() => setNonce((value) => value + 1), []);
 
