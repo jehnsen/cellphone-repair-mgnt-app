@@ -7,11 +7,14 @@ import {
   ArrowLeft,
   BadgeCheck,
   Pencil,
+  Plus,
+  Minus,
   Search,
   ShieldCheck,
   Smartphone,
   UserPlus,
   Users,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
@@ -29,14 +32,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/states";
+import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { StageChip } from "@/components/tag/stage-chip";
-import { useMutation, useShop } from "@/lib/shop/store";
+import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
 import { stageOf } from "@/lib/stages";
-import { formatDate, formatImei, formatMobile, peso } from "@/lib/format";
+import { formatDate, formatDateTime, formatImei, formatMobile, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Customer, Sale, Ticket } from "@/lib/types";
+import type { Customer, Sale, StoreCreditEntry, Ticket } from "@/lib/types";
 
 export function CustomersView() {
   const { db } = useShop();
@@ -306,6 +309,8 @@ function CustomerDetail({
         </div>
       </Panel>
 
+      <StoreCreditPanel customer={customer} />
+
       {warranties.length > 0 ? (
         <Panel>
           <PanelHeader>
@@ -421,6 +426,262 @@ function CustomerDetail({
         )}
       </Panel>
     </div>
+  );
+}
+
+/* ── Store credit ────────────────────────────────────────────────────── */
+
+const CREDIT_SOURCE_LABEL: Record<StoreCreditEntry["source"], string> = {
+  refund: "Refund",
+  payment: "Spent",
+  adjustment: "Adjustment",
+  other: "Movement",
+};
+
+function StoreCreditPanel({ customer }: { customer: Customer }) {
+  const { can } = useShop();
+  const [adjusting, setAdjusting] = useState(false);
+  const { data, loading, error, refetch } = useQuery(
+    (api) => api.getStoreCredit(customer.id),
+    [customer.id],
+  );
+
+  const balance = data?.balance ?? 0;
+  const ledger = data?.ledger ?? [];
+  const mayAdjust = can("settings.manage");
+
+  return (
+    <Panel>
+      <PanelHeader>
+        <Wallet className="size-3.5 text-ink-faint" aria-hidden />
+        <PanelTitle>Store credit</PanelTitle>
+        <span
+          className={cn(
+            "mono ml-auto text-sm font-semibold",
+            balance > 0 ? "text-bench-ink" : "text-ink-soft",
+          )}
+        >
+          {peso(balance)}
+        </span>
+      </PanelHeader>
+
+      {mayAdjust ? (
+        <div className="flex items-center justify-between gap-3 border-b border-rule-soft px-3 py-2 sm:px-4">
+          <p className="text-xs text-ink-soft">
+            Grants and corrections. Refunds and purchases move it on their own.
+          </p>
+          <Button variant="outline" size="xs" onClick={() => setAdjusting(true)}>
+            <Plus aria-hidden /> Adjust
+          </Button>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <LoadingRows rows={3} />
+      ) : error ? (
+        <div className="p-3 sm:p-4">
+          <ErrorState error={error} onRetry={refetch} />
+        </div>
+      ) : ledger.length === 0 ? (
+        <EmptyState
+          icon={Wallet}
+          title="No store-credit activity."
+          body={
+            mayAdjust
+              ? "Grant credit with Adjust, or it builds up here from store-credit refunds."
+              : "Credit from store-credit refunds and adjustments will show up here."
+          }
+        />
+      ) : (
+        <ul className="divide-y divide-rule-soft">
+          {ledger.map((entry) => {
+            const grant = entry.direction === "credit";
+            return (
+              <li
+                key={entry.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm sm:px-4"
+              >
+                <Badge variant={grant ? "bench" : "outline"}>
+                  {CREDIT_SOURCE_LABEL[entry.source]}
+                </Badge>
+                <span className="min-w-0 flex-1 truncate text-ink-soft">
+                  {entry.reason}
+                  {entry.reference ? (
+                    <span className="mono ml-1.5 text-xs text-ink-faint">
+                      {entry.reference}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="mono text-xs text-ink-faint">
+                  {formatDateTime(entry.at)}
+                </span>
+                <span
+                  className={cn(
+                    "mono w-24 text-right font-medium",
+                    grant ? "text-bench-ink" : "text-stamp-ink",
+                  )}
+                >
+                  {grant ? "+" : "−"} {peso(entry.amount)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {adjusting ? (
+        <StoreCreditDialog
+          customer={customer}
+          balance={balance}
+          onClose={() => setAdjusting(false)}
+        />
+      ) : null}
+    </Panel>
+  );
+}
+
+function StoreCreditDialog({
+  customer,
+  balance,
+  onClose,
+}: {
+  customer: Customer;
+  balance: number;
+  onClose: () => void;
+}) {
+  const { user } = useShop();
+  const adjust = useMutation(
+    (
+      api,
+      input: { direction: "credit" | "debit"; amount: number; reason: string },
+    ) => api.adjustStoreCredit({ customerId: customer.id, actorId: user.id, ...input }),
+  );
+
+  const [direction, setDirection] = useState<"credit" | "debit">("credit");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  const value = Number.parseFloat(amount || "0");
+  const overdraw = direction === "debit" && value > balance;
+  const canSave =
+    Number.isFinite(value) &&
+    value > 0 &&
+    reason.trim().length > 0 &&
+    !overdraw &&
+    !adjust.pending;
+
+  const submit = async () => {
+    if (!canSave) return;
+    const { data: result, error } = await adjust.mutate({
+      direction,
+      amount: value,
+      reason: reason.trim(),
+    });
+    if (result) {
+      toast.success(
+        direction === "credit"
+          ? `Granted ${peso(value)} to ${customer.name}.`
+          : `Deducted ${peso(value)} from ${customer.name}.`,
+        { description: `New balance ${peso(result.balance)}.` },
+      );
+      onClose();
+    } else if (error) {
+      const { message, description } = toastError(
+        error,
+        "Could not adjust the balance.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wallet className="size-4 text-ink-faint" aria-hidden />
+            Adjust store credit
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between rounded-lg border border-rule bg-paper px-3 py-2 text-sm">
+            <span className="text-ink-soft">Current balance</span>
+            <span className="mono font-semibold text-ink">{peso(balance)}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { value: "credit", label: "Grant", icon: Plus },
+                { value: "debit", label: "Deduct", icon: Minus },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setDirection(option.value)}
+                aria-pressed={direction === option.value}
+                className={cn(
+                  "tap flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-sm font-medium transition-colors",
+                  direction === option.value
+                    ? "border-bench bg-bench-fill text-bench-ink"
+                    : "border-rule bg-paper text-ink-soft hover:bg-secondary",
+                )}
+              >
+                <option.icon className="size-3.5" aria-hidden />
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sc-amount" className="label-pad">
+              Amount
+            </Label>
+            <InputMono
+              id="sc-amount"
+              inputMode="decimal"
+              autoFocus
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="0.00"
+            />
+            {overdraw ? (
+              <p className="text-xs text-stamp-ink">
+                Only {peso(balance)} on the balance to deduct from.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sc-reason" className="label-pad">
+              Reason
+            </Label>
+            <Textarea
+              id="sc-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              placeholder="Goodwill gesture, correcting a mistaken refund, …"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {adjust.pending
+                ? "Saving…"
+                : direction === "credit"
+                  ? `Grant ${value > 0 ? peso(value) : "credit"}`
+                  : `Deduct ${value > 0 ? peso(value) : "credit"}`}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

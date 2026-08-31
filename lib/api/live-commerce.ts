@@ -348,7 +348,9 @@ export function createCommerceApi(
       });
 
       /* Each payment is its own call — which is also how a split tender is
-         expressed. The server rejects the sum overshooting the total. */
+         expressed. The server rejects the sum overshooting the total. A
+         `trade_in` line carries the acquisition backing it instead of a
+         reference number, and never touches `expected_cash`. */
       for (const payment of input.payments) {
         if (payment.amount <= 0) continue;
         await client.post<PaymentDto>(`/sales/${created.ulid}/payments`, {
@@ -357,6 +359,9 @@ export function createCommerceApi(
             amount: money(payment.amount),
             reference_number: payment.reference ?? null,
             tendered: payment.tendered ?? null,
+            ...(payment.acquisitionUlid
+              ? { acquisition_ulid: payment.acquisitionUlid }
+              : {}),
           },
         });
       }

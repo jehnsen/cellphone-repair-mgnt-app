@@ -57,6 +57,7 @@ const MUTATIONS = new Set<keyof ShopApi>([
   "addNote",
   "createCustomer",
   "updateCustomer",
+  "adjustStoreCredit",
   "createSale",
   "receiveStock",
   "adjustStock",

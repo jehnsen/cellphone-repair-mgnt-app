@@ -20,6 +20,7 @@ import type {
   TokenDto,
   UserDto,
   RepairFindingDto,
+  StoreCreditDto,
 } from "@/lib/api/dto";
 import { toTicketPayment } from "@/lib/api/mappers-commerce";
 import {
@@ -31,6 +32,7 @@ import {
   toTimelineEvent,
   toUser,
   toRepairFinding,
+  toStoreCredit,
 } from "@/lib/api/mappers";
 import type {
   DashboardSummary,
@@ -606,6 +608,31 @@ export function createLiveApi(
 
       const { data } = await client.patch<CustomerDto>(`/customers/${id}`, { body });
       return toCustomer(data);
+    },
+
+    /* ── Store credit ──────────────────────────────────────────────── */
+
+    async getStoreCredit(customerId) {
+      const { data } = await client.get<StoreCreditDto>(
+        `/customers/${customerId}/store-credit`,
+      );
+      return toStoreCredit(customerId, data);
+    },
+
+    async adjustStoreCredit({ customerId, direction, amount, reason }) {
+      await client.post(`/customers/${customerId}/store-credit/adjust`, {
+        body: {
+          direction,
+          amount: money(amount),
+          reason: reason.trim(),
+        },
+      });
+      /* The adjust response is the single entry; re-read for the fresh
+         balance and the ledger the panel renders. */
+      const { data } = await client.get<StoreCreditDto>(
+        `/customers/${customerId}/store-credit`,
+      );
+      return toStoreCredit(customerId, data);
     },
 
     /* ── Catalog ───────────────────────────────────────────────────── */

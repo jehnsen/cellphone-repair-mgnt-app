@@ -22,4 +22,5 @@ export const PENDING_CONTEXTS = [
   "Standalone ticket notes without a status change",
   "Warranty slips and warranty claim tickets",
   "The Viber/SMS outbox (message templates are live under Settings)",
+  "Buy-back / trade-in acquisitions (create, IMEI check, complete) — POS can spend a completed acquisition as tender, but not create one here",
 ] as const;

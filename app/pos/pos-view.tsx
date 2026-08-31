@@ -9,6 +9,7 @@ import {
   Minus,
   Plus,
   Printer,
+  Repeat,
   ScanBarcode,
   Trash2,
   Wallet,
@@ -28,7 +29,7 @@ import { PrintDocument } from "@/components/print/print-document";
 import { SaleReceipt } from "@/components/print/sale-receipt";
 import { itemStock } from "@/lib/shop/queries";
 import { computeTax } from "@/lib/vat";
-import { peso } from "@/lib/format";
+import { money, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { NewSaleInput } from "@/lib/shop/contract";
 import type { InventoryItem, PaymentMethod, Sale, SaleLineKind } from "@/lib/types";
@@ -68,6 +69,11 @@ export function PosView() {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [tendered, setTendered] = useState("");
   const [reference, setReference] = useState("");
+  /* A traded-in handset comes in through the buy-back flow (create → IMEI
+     check → complete); here we only spend a completed acquisition as tender. */
+  const [tradeIn, setTradeIn] = useState(false);
+  const [acquisitionId, setAcquisitionId] = useState("");
+  const [tradeInValue, setTradeInValue] = useState("");
   /* 58mm and 80mm are the two rolls PH counter printers use. */
   const [rollWidth, setRollWidth] = useState<58 | 80>(80);
   const [completed, setCompleted] = useState<Sale | null>(null);
@@ -232,14 +238,25 @@ export function PosView() {
     [subtotal, seniorPwd, db.shop.vatRegistered, db.shop.vatRate],
   );
 
+  /* Trade-in offsets the bill; it never over-pays and never gives change, so
+     it is capped at the total. Any excess offered price is the buy-back's
+     problem, not the sale's. */
+  const tradeInAmount = tradeIn
+    ? money(Math.min(Math.max(0, Number(tradeInValue) || 0), tax.totalDue))
+    : 0;
+  const remainingDue = money(Math.max(0, tax.totalDue - tradeInAmount));
+
   const tenderedValue = Number(tendered) || 0;
-  const change = method === "cash" ? Math.max(0, tenderedValue - tax.totalDue) : 0;
-  const shortBy = method === "cash" ? Math.max(0, tax.totalDue - tenderedValue) : 0;
+  const change = method === "cash" ? Math.max(0, tenderedValue - remainingDue) : 0;
+  const shortBy = method === "cash" ? Math.max(0, remainingDue - tenderedValue) : 0;
+
+  const tradeInReady = !tradeIn || (acquisitionId.trim().length > 0 && tradeInAmount > 0);
 
   const canCharge =
     cart.length > 0 &&
     !createSale.pending &&
-    (method !== "cash" || tenderedValue >= tax.totalDue) &&
+    tradeInReady &&
+    (remainingDue === 0 || method !== "cash" || tenderedValue >= remainingDue) &&
     (!seniorPwd || (seniorId.trim() && seniorName.trim()));
 
   const clearCart = () => {
@@ -250,6 +267,9 @@ export function PosView() {
     setTendered("");
     setReference("");
     setMethod("cash");
+    setTradeIn(false);
+    setAcquisitionId("");
+    setTradeInValue("");
     scanRef.current?.focus();
   };
 
@@ -275,12 +295,26 @@ export function PosView() {
           }
         : undefined,
       payments: [
-        {
-          method,
-          amount: tax.totalDue,
-          reference: method === "cash" ? undefined : reference.trim() || undefined,
-          tendered: method === "cash" ? tenderedValue : undefined,
-        },
+        ...(tradeInAmount > 0
+          ? [
+              {
+                method: "trade_in" as PaymentMethod,
+                amount: tradeInAmount,
+                acquisitionUlid: acquisitionId.trim(),
+              },
+            ]
+          : []),
+        ...(remainingDue > 0
+          ? [
+              {
+                method,
+                amount: remainingDue,
+                reference:
+                  method === "cash" ? undefined : reference.trim() || undefined,
+                tendered: method === "cash" ? tenderedValue : undefined,
+              },
+            ]
+          : []),
       ],
       cashierId: user.id,
     });
@@ -550,8 +584,72 @@ export function PosView() {
                   <span className="text-ink">Total due</span>
                   <span className="mono text-ink">{peso(tax.totalDue)}</span>
                 </div>
+                {tradeInAmount > 0 ? (
+                  <>
+                    <Row
+                      label="Trade-in"
+                      value={`− ${peso(tradeInAmount)}`}
+                      tone="bench"
+                    />
+                    <div className="flex items-baseline justify-between pt-1 text-sm font-semibold">
+                      <span className="text-ink">Remaining to pay</span>
+                      <span className="mono text-ink">{peso(remainingDue)}</span>
+                    </div>
+                  </>
+                ) : null}
               </div>
 
+              <div className="space-y-1.5">
+                <label className="flex items-start gap-2 text-sm text-ink">
+                  <Checkbox
+                    checked={tradeIn}
+                    onCheckedChange={(checked) => setTradeIn(Boolean(checked))}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Repeat className="size-3.5 text-ink-faint" aria-hidden />
+                      Apply a trade-in
+                    </span>
+                    <span className="mt-0.5 block text-xs text-ink-soft">
+                      Spend a completed buy-back acquisition as tender.
+                    </span>
+                  </span>
+                </label>
+
+                {tradeIn ? (
+                  <div className="grid gap-2 pt-1">
+                    <InputMono
+                      value={acquisitionId}
+                      onChange={(e) => setAcquisitionId(e.target.value.trim())}
+                      placeholder="Acquisition ID"
+                      aria-label="Acquisition ID"
+                    />
+                    <InputMono
+                      inputMode="decimal"
+                      value={tradeInValue}
+                      onChange={(e) =>
+                        setTradeInValue(e.target.value.replace(/[^0-9.]/g, ""))
+                      }
+                      placeholder="Trade-in value"
+                      aria-label="Trade-in value"
+                    />
+                    {(Number(tradeInValue) || 0) > tax.totalDue ? (
+                      <p className="text-xs text-ink-soft">
+                        Capped at the {peso(tax.totalDue)} total — the rest stays
+                        on the acquisition.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              {remainingDue === 0 && tradeInAmount > 0 ? (
+                <div className="rounded-md bg-bench-fill px-2.5 py-2 text-sm font-medium text-bench-ink">
+                  Trade-in covers the full amount.
+                </div>
+              ) : (
+              <>
               <div className="space-y-1.5">
                 <Label>Payment method</Label>
                 <div className="grid grid-cols-3 gap-2">
@@ -600,7 +698,7 @@ export function PosView() {
                     <Button
                       variant="outline"
                       size="xs"
-                      onClick={() => setTendered(String(tax.totalDue))}
+                      onClick={() => setTendered(String(remainingDue))}
                     >
                       Exact
                     </Button>
@@ -630,6 +728,8 @@ export function PosView() {
                   />
                 </div>
               )}
+              </>
+              )}
 
               <Button
                 className="w-full"
@@ -638,7 +738,9 @@ export function PosView() {
                 disabled={!canCharge}
               >
                 <Banknote aria-hidden />
-                {createSale.pending ? "Charging…" : `Charge ${peso(tax.totalDue)}`}
+                {createSale.pending
+                  ? "Charging…"
+                  : `Charge ${peso(tradeInAmount > 0 ? remainingDue : tax.totalDue)}`}
               </Button>
             </PanelBody>
           </Panel>

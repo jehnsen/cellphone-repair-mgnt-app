@@ -4,6 +4,8 @@ import type {
   BranchDto,
   CustomerDeviceDto,
   CustomerDto,
+  StoreCreditDto,
+  StoreCreditEntryDto,
   DeviceModelDto,
   MessageTemplateDto,
   ProductDto,
@@ -34,6 +36,9 @@ import type {
   ServiceItem,
   ShopProfile,
   ShopSetting,
+  StoreCredit,
+  StoreCreditEntry,
+  StoreCreditSource,
   Ticket,
   TicketPhoto,
   TicketStatus,
@@ -114,6 +119,45 @@ export function toCustomer(dto: CustomerDto): Customer {
     address: dto.address ?? undefined,
     notes: dto.notes ?? undefined,
     createdAt: dto.created_at ?? new Date().toISOString(),
+  };
+}
+
+const STORE_CREDIT_SOURCE: Record<string, StoreCreditSource> = {
+  refund: "refund",
+  store_credit_refund: "refund",
+  payment: "payment",
+  store_credit_payment: "payment",
+  adjustment: "adjustment",
+  manual_adjustment: "adjustment",
+};
+
+function toStoreCreditEntry(dto: StoreCreditEntryDto): StoreCreditEntry {
+  const amount = num(dto.amount);
+  return {
+    id: dto.ulid,
+    /* Fall back to the sign of the amount when the server omits a direction. */
+    direction: dto.direction ?? (amount < 0 ? "debit" : "credit"),
+    amount: Math.abs(amount),
+    balanceAfter:
+      dto.balance_after === null || dto.balance_after === undefined
+        ? undefined
+        : num(dto.balance_after),
+    reason: dto.reason?.trim() || "—",
+    source: STORE_CREDIT_SOURCE[dto.source ?? ""] ?? "other",
+    reference: dto.reference ?? undefined,
+    at: dto.created_at ?? new Date().toISOString(),
+    by: dto.actor?.name ?? undefined,
+  };
+}
+
+export function toStoreCredit(customerId: string, dto: StoreCreditDto): StoreCredit {
+  const rows = dto.entries ?? dto.ledger ?? [];
+  return {
+    customerId,
+    balance: num(dto.balance),
+    ledger: rows
+      .map(toStoreCreditEntry)
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
   };
 }
 

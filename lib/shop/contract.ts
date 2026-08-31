@@ -26,6 +26,7 @@ import type {
   Shift,
   ShopSetting,
   StockMovement,
+  StoreCredit,
   Supplier,
   Ticket,
   TicketPhoto,
@@ -97,6 +98,11 @@ export interface NewSaleInput {
     amount: number;
     reference?: string;
     tendered?: number;
+    /** `trade_in` only: the completed buy-back acquisition backing this
+     *  tender. The server caps the amount at its offered price and refuses
+     *  an acquisition that is not completed, is at another branch, or was
+     *  already spent (`409 TRADE_IN_NOT_AVAILABLE`). */
+    acquisitionUlid?: string;
   }[];
   officialReceiptNo?: string;
   note?: string;
@@ -280,6 +286,24 @@ export interface ShopApi {
   getCustomer(id: ID): Promise<Customer>;
   createCustomer(input: Omit<Customer, "id" | "createdAt">): Promise<Customer>;
   updateCustomer(input: { id: ID } & Partial<Omit<Customer, "id" | "createdAt">>): Promise<Customer>;
+
+  /* ── Store credit ─────────────────────────────────────────────────
+     Shop-wide balance plus the most recent ledger entries, newest
+     first. Needs `customers.view`. */
+  getStoreCredit(customerId: ID): Promise<StoreCredit>;
+  /**
+   * Manager/owner only (`store_credit.manage`). `credit` grants,
+   * `debit` corrects or claws back — a debit past the balance is
+   * refused with `422 INSUFFICIENT_STORE_CREDIT`. Refund- and
+   * payment-driven movements go through the sales endpoints, not here.
+   */
+  adjustStoreCredit(input: {
+    customerId: ID;
+    direction: "credit" | "debit";
+    amount: number;
+    reason: string;
+    actorId: ID;
+  }): Promise<StoreCredit>;
 
   getItems(query?: ItemQuery): Promise<InventoryItem[]>;
   getItem(id: ID): Promise<InventoryItem>;

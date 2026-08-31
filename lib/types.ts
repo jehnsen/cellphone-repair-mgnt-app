@@ -62,6 +62,38 @@ export interface Customer {
   createdAt: ISODate;
 }
 
+/* ── Store credit ──────────────────────────────────────────────────────
+   A shop-wide balance the customer can spend as tender. It moves on
+   `store_credit` refunds (a credit), `store_credit` payments (a debit),
+   and the manual manager/owner adjustment. */
+
+export type StoreCreditSource = "refund" | "payment" | "adjustment" | "other";
+
+export interface StoreCreditEntry {
+  id: ID;
+  /** `credit` adds to the balance, `debit` takes from it. */
+  direction: "credit" | "debit";
+  /** Always positive — the sign is carried by `direction`. */
+  amount: number;
+  /** Running balance after this entry, when the server reports it. */
+  balanceAfter?: number;
+  reason: string;
+  /** What moved the money: a refund, a payment, or a hand adjustment. */
+  source: StoreCreditSource;
+  /** Sale number, refund number, or whatever the server attached. */
+  reference?: string;
+  at: ISODate;
+  /** Who made the entry, for adjustments. */
+  by?: string;
+}
+
+export interface StoreCredit {
+  customerId: ID;
+  balance: number;
+  /** Most recent first. Not the whole history — the latest entries. */
+  ledger: StoreCreditEntry[];
+}
+
 /* ── Devices ────────────────────────────────────────────────────────── */
 
 export type DeviceType = "phone" | "tablet" | "smartwatch" | "laptop";

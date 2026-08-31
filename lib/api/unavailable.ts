@@ -47,6 +47,15 @@ export function createUnavailableApi(): ShopApi {
     async updateCustomer() {
       throw missing("Updating a customer", "PATCH /customers/{id}");
     },
+    async getStoreCredit() {
+      return { customerId: "", balance: 0, ledger: [] };
+    },
+    async adjustStoreCredit() {
+      throw missing(
+        "Adjusting store credit",
+        "POST /customers/{id}/store-credit/adjust",
+      );
+    },
     async getItems() {
       return [];
     },

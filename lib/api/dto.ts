@@ -55,6 +55,26 @@ export interface CustomerDto {
   updated_at?: string | null;
 }
 
+export interface StoreCreditEntryDto {
+  ulid: string;
+  direction?: "credit" | "debit" | null;
+  amount: number | string;
+  balance_after?: number | string | null;
+  reason?: string | null;
+  /** "refund" | "payment" | "adjustment" — free text tolerated. */
+  source?: string | null;
+  reference?: string | null;
+  actor?: UserDto | null;
+  created_at?: string | null;
+}
+
+export interface StoreCreditDto {
+  balance: number | string;
+  /** Newest first. The server may name it `entries` or `ledger`. */
+  entries?: StoreCreditEntryDto[] | null;
+  ledger?: StoreCreditEntryDto[] | null;
+}
+
 export interface DeviceBrandDto {
   ulid: string;
   name: string;
