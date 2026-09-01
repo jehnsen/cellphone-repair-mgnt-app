@@ -175,14 +175,17 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
    *
    * `scope` is applied *before* anything is fetched, so the first paint is
    * already branch-correct rather than showing the whole shop for a moment.
-   * It defaults to the user's own branch; an owner can pass another branch,
-   * or null for all of them.
+   *
+   * It defaults to `null` — "don't send `?branch=`", so the server returns the
+   * caller's own branch. Passing an explicit branch ULID (or `"all"`) is a
+   * *widen* request on the wire and 403s for anyone without `branches.view_all`,
+   * so only an owner-driven switch supplies one.
    */
   const load = useCallback(
     async (
       nextBranch: BranchDto | null,
       self: User | null,
-      scope: BranchScope | null = nextBranch?.ulid ?? null,
+      scope: BranchScope | null = null,
     ) => {
       client.setBranchScope(scope);
       setScopeState(scope);
