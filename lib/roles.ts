@@ -1,16 +1,19 @@
 import type { Permission, Role } from "@/lib/types";
 
 /**
- * The permission matrix, kept but currently dormant.
+ * The permission matrix. Live, not dormant: the nav rail and mobile nav both
+ * filter on `can()`, and a handful of screens gate controls on it.
  *
- * The shop is a one-man operation: a single seeded user owns it, repairs the
- * units, rings up the sales, and closes the drawer. Nothing in the UI branches
- * on `can()` any more — every screen is simply available. This file stays so
- * that hiring a second person is a matter of seeding another user and putting
- * the guards back, rather than re-modelling the domain.
+ * The shop runs two sites — the repair branch, and a sales-only floor
+ * (appliances, handsets, laptops, accessories). Everyone is scoped to the
+ * branch they work at; only the owner holds `branch.switch` — the client's
+ * name for the server's `branches.view_all` — and can widen the view to
+ * another branch or to all of them at once.
  *
- * Never a security boundary either way: there is no auth, and these checks
- * would run in the browser. A real build enforces permissions on the server.
+ * Never a security boundary: every check here runs in the browser and every
+ * route stays reachable by URL. The server enforces access — these checks only
+ * keep the UI honest about what a role is meant to be doing. A 403 is rendered
+ * as a plain "not permitted" state, not an error.
  */
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -23,7 +26,7 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const ROLE_BLURB: Record<Role, string> = {
   owner: "Sees margins, financial reports, and settings.",
   manager: "Runs the shop day to day, minus owner financials.",
-  cashier: "Counter work: intake, release, POS, and the drawer.",
+  cashier: "One branch only: POS, intake, the board, release, and the drawer.",
   technician: "The job queue, diagnosis, and parts consumption.",
 };
 
@@ -48,6 +51,7 @@ const ALL: Permission[] = [
   "reports.financial",
   "settings.manage",
   "users.manage",
+  "branch.switch",
 ];
 
 export const PERMISSION_LABEL: Record<Permission, string> = {
@@ -71,21 +75,29 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   "reports.financial": "View financial reports",
   "settings.manage": "Manage settings",
   "users.manage": "Manage users",
+  "branch.switch": "See and switch between branches",
 };
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   owner: ALL,
-  manager: ALL.filter((p) => p !== "users.manage"),
+  /* `branch.switch` mirrors the server's `branches.view_all`, which is granted
+     to the owner alone: a manager runs one branch. Asking to widen without it
+     is a 403, so offering the control would only produce an error. */
+  manager: ALL.filter((p) => p !== "users.manage" && p !== "branch.switch"),
+  /* Counter work at their own branch: ring up sales, take a unit in, move it
+     along the board, and hand it back. No reports, no stockroom, and no
+     cross-branch view — the shop's figures are not theirs to see. Note that
+     POS still sells stock: it reads the catalog through `getItems` directly,
+     so dropping `inventory.view` hides the stockroom screen without taking
+     anything off the counter. See ROLE_BLURB. */
   cashier: [
     "ticket.create",
     "ticket.edit",
     "ticket.release",
-    "inventory.view",
     "pos.sell",
     "pos.return",
     "shift.open",
     "shift.close",
-    "reports.view",
   ],
   technician: [
     "ticket.edit",
@@ -104,6 +116,8 @@ export function can(role: Role, permission: Permission): boolean {
 export const NAV_PERMISSION: Record<string, Permission | null> = {
   "/": null,
   "/intake": "ticket.create",
+  /* The board stays open to a cashier: they take the unit in and move it
+     along, they just do not hand it back or see the shop's figures. */
   "/board": null,
   "/release": "ticket.release",
   "/pos": "pos.sell",

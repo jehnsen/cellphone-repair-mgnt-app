@@ -37,8 +37,24 @@ only way to see the loading, empty, and error states on demand.
 
 ## What this is
 
-A front end for a single-branch Philippine cellphone repair shop: intake →
-repair board → release, plus POS, inventory, customers, and reports.
+A front end for a two-branch Philippine shop: intake → repair board → release,
+plus POS, inventory, customers, and reports.
+
+**Two branches, and they are not alike.** The main site repairs and sells
+(`type: repair_and_sales`); the second is a sales-only floor — appliances,
+handsets, laptops, accessories — with no repair bench (`type: sales_only`,
+`offers_repairs: false`). `BranchSummary` in `lib/types.ts` carries that
+distinction.
+
+Who sees what:
+
+- A **cashier** is pinned to the one branch they work at. They get the
+  dashboard, POS, intake, the board, inventory and customers — no Release, no
+  Reports, no Settings, and no branch switcher.
+- An **owner or manager** holds `branch.switch` and can point the app at either
+  branch or at all of them at once, from the switcher in the top strip
+  (`components/shell/branch-switcher.tsx`). It is hidden unless the account can
+  actually see more than one branch.
 
 The counter side also covers: a cash **drawer** that opens, takes cash in/out,
 and closes against a counted total (`app/pos`); **store credit** per customer,
@@ -106,6 +122,124 @@ ships. `README.md` has the four-step "wiring up a new endpoint" recipe.
 state rather than content — expected, not a bug. Anything deriving from
 `new Date()` at render time needs the same treatment (see the greeting in
 `app/login/login-view.tsx`).
+
+### Branch scope
+
+Reads are scoped in exactly one place: `HttpClient.setBranchScope()` in
+`http.ts` stamps `?branch=` onto every GET, skipping the shop-wide paths in
+`BRANCH_AGNOSTIC` (`/branches` itself must stay unfiltered, or the switcher
+could only ever see the branch it is already on). Because the param rides in
+the URL it is part of the GET cache key, so switching branch can never serve
+the previous branch's rows.
+
+The API's contract, which the client mirrors exactly:
+
+- **No param** — the caller's own branch. The default, and all a cashier ever
+  gets.
+- **`?branch={ulid}`** / **`?branch=all`** — widens the view, and requires
+  `branches.view_all`. Anyone else asking gets a **403 rather than a silently
+  narrowed result**, which is why `branch.switch` in `lib/roles.ts` is granted
+  to the owner alone — a manager would only ever see the error.
+
+Note the asymmetry: `null` scope is *not* "every branch", it is "don't ask".
+Widening is the explicit literal `"all"`.
+
+Two things that look alike and are not:
+
+- **`branch`** is the signed-in user's *home* branch — where their writes land.
+  Writes take it from `branchRef`, never from the scope, so an owner reading
+  "all branches" still files a job order at their own site.
+- **`branchScope`** is what is being *looked at*.
+
+Switching drops `db` (`hydrate` with `EMPTY_DB`) rather than merging — a board
+still holding the other branch's tickets is worse than a moment of loading.
+
+None of this is a security boundary: the server decides what a token may read.
+It is what makes the UI *ask* the right question.
+
+**The API rate-limits bursts.** Loading the shop is ~35 requests, and
+`?branch=all` roughly doubles the rows behind them; past a threshold the server
+answers `429 RATE_LIMITED` with a `retry_after_seconds`. `sendWithRetry` in
+`http.ts` honours that for GETs (bounded, reads only). If a screen shows an
+em-dash where a count belongs, suspect a throttled `/dashboard`, not a
+rendering bug. Bootstrapping caps `/sales` at `SALE_PAGES` for the same reason.
+
+### One trap in the restyled `Select`
+
+`components/ui/select.tsx` defaults `SelectContent` to `position="item-aligned"`,
+but the classes it applies — `max-h-(--radix-select-content-available-height)`
+and `origin-(--radix-select-content-transform-origin)` — are variables Radix
+only sets in **popper** mode. Passing `align` without `position="popper"`
+therefore renders the menu far below the fold, where nothing can click it:
+`elementFromPoint` over the options returns `null`.
+
+So: any `SelectContent` that needs `align` (or `side`/`sideOffset`) must also
+pass `position="popper"`. The branch switcher does. The other Selects in the
+app are fine because they pass no alignment at all.
+
+Worth knowing when screenshotting this: a portaled menu can come back
+semi-transparent in `Page.captureScreenshot` even when it is fully opaque in the
+page. Confirm with computed style (`opacity`, `backgroundColor`) or a clipped
+capture of the menu rect before chasing a stacking bug that is not there.
+
+### Branches are managed, not hard-coded
+
+Settings → Branch carries a roster above the shop's own record: the owner adds
+a site, renames it, changes what it does, or closes it. Owner-only, gated on
+`users.manage` — `POST /branches` is a 403 for a manager.
+
+**A branch is never deleted.** The API answers `405` to DELETE, and rightly: a
+closed site's tickets and sales still have to resolve. Closing sets
+`is_active: false`, which drops it from the branch switcher and the staff form
+while leaving its history intact — so `getBranches()` is active-only by
+default and management passes `{ includeInactive: true }`.
+
+`type` and `offers_repairs` travel together (a sales-only floor has no repair
+bench); `updateBranchById` sets both from one `kind`. The `code` is unique and
+prints inside every ticket number (`JO-AL-…`), so the dialog upper-cases it and
+shows the resulting number as you type.
+
+Anything that must reach the branch switcher without a reload has to be in
+`MUTATIONS` in `shop-api.ts` — that set is what bumps `version`, and the store
+re-reads the branch list when it moves. A write missing from it looks fine
+until someone notices the switcher is stale.
+
+### Staff accounts
+
+Settings → Staff is owner-only, and deliberately ignores the branch switcher:
+the owner manages the sales floor's cashiers from the repair branch, so a
+roster that changed under the switcher would hide half the staff without
+saying so. `getUsers` / `createUser` / `updateUser` / `deleteUser` all pass
+`?branch=all`, which is why `scopedQuery` lets an explicit `branch` on the call
+win over the ambient scope.
+
+`users.manage` is granted to the owner alone, mirroring the server: a manager
+gets 403 on both `/users?branch=all` and `POST /users`, so the tab is hidden
+rather than shown broken. `bootstrapShop` still reads `/users` unscoped for
+technician names, which a manager can do — don't "tidy" that into the
+all-branches call.
+
+On the wire `role` is a single name, not the array the resource returns, and
+`DELETE` is a **soft delete**: the person stops signing in, and the tickets and
+sales they handled keep their name. Password is min 8 characters, and an empty
+password field on edit means "leave it alone" rather than "clear it".
+
+### The dashboard and the board come from the server
+
+`GET /dashboard` computes the day sheet's figures in SQL — counts always,
+plus `inventory.stock_value` only for a caller with `reports.margin.view`
+(absent becomes `null`, so the screen omits the figure rather than showing a
+zero that reads as an empty stockroom). With `?branch=all` it also returns a
+per-branch `branches[]` split, which `DashboardSummary.branches` carries.
+
+`GET /tickets/board` returns open tickets grouped into status columns as lean
+cards — deliberately no pricing, no unlock secrets, no claim code, because the
+board faces the shop floor. The day sheet reads `overdue` and `byStatus` from
+it, since `/dashboard` reports totals rather than lateness.
+
+Neither is derived from `db`: that holds only what this browser has fetched and
+`getAll()` stops at 40 pages, so a cache-counted total goes quietly too low as
+the shop grows.
 
 ### Reports come from the server, never from the cache
 
@@ -217,8 +351,9 @@ it.
 ## Verifying UI work
 
 There's no browser tool wired up, but Chrome is installed and works headless.
-This machine is **Windows**; Chrome is at
-`C:\Program Files\Google\Chrome\Application\chrome.exe`.
+This machine is **macOS**; Chrome is at
+`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. Quote
+`"--remote-allow-origins=*"` — zsh globs the bare flag and the launch fails.
 
 The one-shot `--screenshot=` flag is unreliable here (and `--headless=new`
 ignores it). What works: launch with `--headless=new --remote-debugging-port=9222
@@ -231,7 +366,7 @@ for accurate mobile widths.
 
 **A real Laravel API is already running on this machine** at
 `http://127.0.0.1:8000/api/v1` with a seeded shop. Sign in through the app's own
-`/login` form (`ricardo.santos@fixmo.test` / `password`, an owner), or
+`/login` form (`nelson.bonalos@gmail.com` / `password`, an owner), or
 `POST /auth/token` for a bearer token to probe endpoints directly. Because it is
 the real shop DB, treat writes as real: void a stray probe sale
 (`POST /sales/{ulid}/void` needs `void_reason`), delete a throwaway

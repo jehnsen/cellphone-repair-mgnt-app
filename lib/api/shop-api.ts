@@ -6,15 +6,18 @@ import {
   toTicket,
   toUser,
 } from "@/lib/api/mappers";
-import { createLiveApi, dashboardFromTickets, type LiveContext } from "@/lib/api/live-api";
+import { createLiveApi, type LiveContext } from "@/lib/api/live-api";
 import { createUnavailableApi } from "@/lib/api/unavailable";
 import { createCommerceApi, loadInventory } from "@/lib/api/live-commerce";
 import { createSettingsApi } from "@/lib/api/live-settings";
 import { toSale, toShift, toSupplier } from "@/lib/api/mappers-commerce";
 import type { HttpClient } from "@/lib/api/http";
+import { toDashboardSummary } from "@/lib/api/mappers";
 import type {
   BranchDto,
   CustomerDto,
+  BoardDto,
+  DashboardDto,
   ProductDto,
   RepairTicketDto,
   SaleDto,
@@ -73,6 +76,11 @@ const MUTATIONS = new Set<keyof ShopApi>([
   "addCashMovement",
   "updateSettings",
   "updateBranch",
+  "createBranch",
+  "updateBranchById",
+  "createUser",
+  "updateUser",
+  "deleteUser",
   "createMessageTemplate",
   "updateMessageTemplate",
 ]);
@@ -101,33 +109,28 @@ export function createShopApi({
     ...createSettingsApi(client, context),
   };
 
-  /* The day sheet's counts.
-     This deliberately re-reads rather than counting the local cache: the
-     overdue, ready, and drawer figures are the numbers this shop is run on,
-     and a count that lags an action would be worse than a slow one. The cost
-     is paid once — each request is identical to the one the matching screen
-     makes, so the HTTP layer collapses them into a single walk. */
-  const emptyDashboard = api.getDashboard;
+  /* The day sheet's counts, computed in SQL by `GET /dashboard`.
+     Never derived from `db`: that holds only what this browser has fetched and
+     `getAll()` stops at 40 pages, so a cache-counted total would go quietly
+     too low as the shop grows. The one thing the endpoint does not carry is
+     the drawer, which is the open shift's own reconciliation. */
   api.getDashboard = async () => {
-    const base = await emptyDashboard();
-
-    const [tickets, items, openShift, sales] = await Promise.all([
-      api.getTickets({}),
-      api.getItems({}).catch(() => []),
+    const [{ data }, board, openShift] = await Promise.all([
+      client.get<DashboardDto>("/dashboard"),
+      /* `/dashboard` reports totals, not lateness or a per-status split; the
+         board carries both, and its cards are the whole open set rather than
+         a page of it. Optional: a failure here costs the two board-derived
+         figures, not the whole day sheet. */
+      client
+        .get<BoardDto>("/tickets/board")
+        .then(({ data: rows }) => rows)
+        .catch(() => null),
       api.getOpenShift().catch(() => null),
-      api.getSales({ from: startOfToday() }).catch(() => []),
     ]);
 
-    const summary = dashboardFromTickets(tickets, base);
-    const takings = sales.filter((sale) => sale.status !== "void");
-
+    const summary = toDashboardSummary(data, board);
     return {
       ...summary,
-      todaySales: money(takings.reduce((sum, sale) => sum + sale.totalDue, 0)),
-      todaySaleCount: takings.length,
-      lowStock: items.filter(
-        (item) => item.quantityOnHand <= item.reorderPoint && item.active,
-      ).length,
       /* `expected_cash` is the server's own reconciliation — never recomputed
          here, or the drawer would disagree with the close-out report. */
       cashOnHand: openShift?.expectedCash ?? openShift?.startingCash ?? null,
@@ -251,9 +254,6 @@ function sameIds<T extends { id: string }>(a: T[], b: T[]): boolean {
 }
 
 /** Midnight Manila, as an ISO instant the sales filter understands. */
-function startOfToday(): string {
-  return `${manilaDayKey(new Date())}T00:00:00+08:00`;
-}
 
 /**
  * The subset of `ShopProfile` that the branch row owns. `toShopProfile` is the
@@ -288,6 +288,9 @@ export interface BootstrapResult {
  * First load: fetch every context the API owns. What it does not own stays
  * empty, and the screens for those show their empty states.
  */
+/** Pages of recent sales kept in the cache at boot; 15 rows each. */
+const SALE_PAGES = 4;
+
 export async function bootstrapShop(
   client: HttpClient,
   branch: BranchDto | null,
@@ -334,8 +337,13 @@ export async function bootstrapShop(
         .getAll<SupplierDto>("/suppliers", { query: { sort: "name" } })
         .then((rows) => rows.map(toSupplier))
         .catch(failed("Suppliers", [] as Supplier[])),
+      /* Recent sales only. The cache's sales feed one screen — a customer's
+         purchase history — and paging the whole ledger at boot cost a dozen
+         round trips and tripped the API's rate limiter, twice over under
+         `?branch=all`. Figures of record come from `/reports`, never from
+         here, so a bounded window costs nothing that matters. */
       client
-        .getAll<SaleDto>("/sales", { query: { sort: "-created_at" } })
+        .getAll<SaleDto>("/sales", { query: { sort: "-created_at" } }, SALE_PAGES)
         .then((rows) => rows.map(toSale))
         .catch(failed("Sales", [] as Sale[])),
       client

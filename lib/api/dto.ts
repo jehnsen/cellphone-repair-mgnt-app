@@ -10,6 +10,9 @@ export interface BranchDto {
   ulid: string;
   name: string;
   code: string;
+  /** `sales_only` is the second site: a shop floor with no repair bench. */
+  type?: "repair_and_sales" | "sales_only" | null;
+  offers_repairs?: boolean | null;
   legal_name?: string | null;
   address?: {
     line1?: string | null;
@@ -382,4 +385,64 @@ export interface RepairFindingDto {
   recorded_by?: { ulid: string; name?: string } | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+/** `GET /dashboard` — the landing summary, computed in SQL. */
+export interface DashboardMetricsDto {
+  sales?: {
+    count_today?: number | null;
+    gross_today?: string | number | null;
+  } | null;
+  repairs?: {
+    open?: number | null;
+    ready_for_pickup?: number | null;
+    awaiting_approval?: number | null;
+    unclaimed?: number | null;
+    intake_today?: number | null;
+  } | null;
+  inventory?: {
+    low_stock_items?: number | null;
+    /** Absent without `reports.margin.view`. */
+    stock_value?: string | number | null;
+  } | null;
+}
+
+export interface DashboardDto {
+  scope?: "branch" | "all_branches" | null;
+  as_of?: string | null;
+  totals?: DashboardMetricsDto | null;
+  /** Only sent with `?branch=all`. */
+  branches?: Array<{
+    ulid: string;
+    name: string;
+    code: string;
+    type?: string | null;
+    offers_repairs?: boolean | null;
+    metrics?: DashboardMetricsDto | null;
+  }> | null;
+}
+
+/** `GET /tickets/board` — lean cards for the shop-floor board. */
+export interface BoardCardDto {
+  ulid: string;
+  ticket_number: string;
+  status?: string | null;
+  customer_name?: string | null;
+  device?: string | null;
+  reported_problem?: string | null;
+  assigned_technician?: string | null;
+  promised_date?: string | null;
+  is_overdue?: boolean | null;
+  created_at?: string | null;
+  branch?: { ulid: string; code?: string | null } | null;
+}
+
+export interface BoardDto {
+  scope?: "branch" | "all_branches" | null;
+  as_of?: string | null;
+  columns?: Array<{
+    status: string;
+    count?: number | null;
+    tickets?: BoardCardDto[] | null;
+  }> | null;
 }

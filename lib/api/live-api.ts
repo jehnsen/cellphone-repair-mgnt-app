@@ -1,4 +1,4 @@
-import { agingOf, STATUS_META } from "@/lib/status";
+import { agingOf } from "@/lib/status";
 import { transitionPath } from "@/lib/stages";
 import { money } from "@/lib/format";
 import { ApiError } from "@/lib/api/errors";
@@ -38,7 +38,6 @@ import {
   toServiceItem,
 } from "@/lib/api/mappers";
 import type {
-  DashboardSummary,
   DeviceCatalog,
   NewTicketInput,
   ShopApi,
@@ -61,6 +60,9 @@ export interface LiveContext {
   currentUser: () => User | null;
 }
 
+/** The API's literal for "every branch", used where a screen must see all. */
+const ALL_BRANCHES = "all";
+
 const notImplemented = (what: string) =>
   new ApiError(
     `${what} is not in the API yet.`,
@@ -73,7 +75,7 @@ function requireBranch(context: LiveContext): string {
   if (!branch) {
     throw new ApiError(
       "No branch is attached to this session.",
-      "Sign out and sign in again so the shop's branch can be loaded.",
+      "Ask an owner to assign your account to a branch, then sign in again.",
       { code: "FORBIDDEN" },
     );
   }
@@ -115,11 +117,17 @@ export async function signIn(
     };
   }
 
+  /* The branch must be the user's own: it is where their writes land. Guessing
+     it is not safe once the shop has two sites — a Branch 2 cashier landing on
+     Branch 1 would file real job orders against the wrong shop. So only fall
+     back to `/branches` when it holds exactly one row and there is nothing to
+     confuse; otherwise leave it null and let the app say so. */
   let branch = user.branch ?? null;
   if (!branch) {
     try {
       const branches = await client.get<BranchDto[]>("/branches");
-      branch = branches.data?.[0] ?? null;
+      const rows = branches.data ?? [];
+      branch = rows.length === 1 ? rows[0] : null;
     } catch {
       branch = null;
     }
@@ -784,7 +792,12 @@ export function createLiveApi(
 
     async getUsers() {
       try {
-        const rows = await client.getAll<UserDto>("/users");
+        /* Across the business, not just the branch the switcher is on: staff
+           management has to reach the other site's cashiers. The server still
+           decides — anyone without `branches.view_all` gets a 403 here. */
+        const rows = await client.getAll<UserDto>("/users", {
+          query: { branch: ALL_BRANCHES },
+        });
         return rows.map(toUser);
       } catch (caught) {
         /* Cashiers and technicians cannot list users; they only need to see
@@ -795,6 +808,51 @@ export function createLiveApi(
         }
         throw caught;
       }
+    },
+
+    /* Staff writes. `role` is a single name on the wire, not the array the
+       resource returns, and `branch_ulid` decides where that person's work
+       lands — so the form asks for both explicitly rather than defaulting. */
+    async createUser(input) {
+      const { data } = await client.post<UserDto>("/users", {
+        query: { branch: ALL_BRANCHES },
+        body: {
+          branch_ulid: input.branchId,
+          employee_code: input.employeeCode,
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          role: input.role,
+        },
+      });
+      return toUser(data);
+    },
+
+    async updateUser(id, patch) {
+      /* Only the keys actually edited are sent: a blank password field means
+         "leave it alone", never "clear it". */
+      const body: Record<string, unknown> = {};
+      if (patch.name !== undefined) body.name = patch.name;
+      if (patch.email !== undefined) body.email = patch.email;
+      if (patch.password) body.password = patch.password;
+      if (patch.role !== undefined) body.role = patch.role;
+      if (patch.employeeCode !== undefined) {
+        body.employee_code = patch.employeeCode;
+      }
+      if (patch.branchId !== undefined) body.branch_ulid = patch.branchId;
+      if (patch.active !== undefined) body.is_active = patch.active;
+
+      const { data } = await client.patch<UserDto>(`/users/${id}`, {
+        query: { branch: ALL_BRANCHES },
+        body,
+      });
+      return toUser(data);
+    },
+
+    async deleteUser(id) {
+      await client.delete(`/users/${id}`, {
+        query: { branch: ALL_BRANCHES },
+      });
     },
 
     async updateProfile(input) {
@@ -817,36 +875,6 @@ export function createLiveApi(
       const { data } = await client.patch<UserDto>(`/users/${self.id}`, { body });
       return toUser(data);
     },
-  };
-}
-
-/**
- * Ticket-derived dashboard numbers, computed from whatever the live client
- * returned. Sales, drawer, and stock come from the mock half — the API has no
- * endpoints for them yet.
- */
-export function dashboardFromTickets(
-  tickets: Ticket[],
-  base: DashboardSummary,
-): DashboardSummary {
-  const now = new Date();
-  const open = tickets.filter((ticket) => !STATUS_META[ticket.status].terminal);
-
-  return {
-    ...base,
-    openTickets: open.length,
-    byStatus: Object.values(STATUS_META)
-      .filter((meta) => meta.onBoard)
-      .map((meta) => ({
-        status: meta.status as TicketStatus,
-        count: tickets.filter((ticket) => ticket.status === meta.status).length,
-      })),
-    overdue: open.filter((ticket) => agingOf(ticket, now).tier === "overdue").length,
-    readyForPickup: tickets.filter((ticket) => ticket.status === "ready_for_pickup")
-      .length,
-    unclaimed: tickets.filter((ticket) => ticket.status === "unclaimed").length,
-    awaitingApproval: tickets.filter((ticket) => ticket.status === "awaiting_approval")
-      .length,
   };
 }
 

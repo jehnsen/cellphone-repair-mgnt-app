@@ -56,7 +56,7 @@ export function createCommerceApi(
     if (!branch) {
       throw new ApiError(
         "No branch is attached to this session.",
-        "Sign out and sign in again so the shop's branch can be loaded.",
+        "Ask an owner to assign your account to a branch, then sign in again.",
         { code: "FORBIDDEN" },
       );
     }

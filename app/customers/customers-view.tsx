@@ -251,6 +251,9 @@ function CustomerDetail({
   }, [tickets]);
 
   const repairSpend = tickets.reduce((sum, t) => sum + t.amountPaid, 0);
+  /* Only the recent sales the cache holds: `/sales` has no customer filter, so
+     there is no way to ask for this customer's whole ledger. The figures below
+     say "recent" rather than "lifetime" instead of quietly under-reporting. */
   const purchaseSpend = sales.reduce((sum, s) => sum + s.totalDue, 0);
   const outstanding = tickets.reduce((sum, t) => sum + Math.max(0, t.balance), 0);
 
@@ -299,8 +302,8 @@ function CustomerDetail({
 
         <div className="grid grid-cols-2 divide-x divide-rule-soft border-t border-rule-soft sm:grid-cols-4">
           <Stat label="Repairs" value={String(tickets.length)} />
-          <Stat label="Purchases" value={String(sales.length)} />
-          <Stat label="Lifetime value" value={peso(repairSpend + purchaseSpend, { whole: true })} />
+          <Stat label="Recent purchases" value={String(sales.length)} />
+          <Stat label="Repair spend" value={peso(repairSpend, { whole: true })} />
           <Stat
             label="Outstanding"
             value={peso(outstanding, { whole: true })}
@@ -405,7 +408,7 @@ function CustomerDetail({
 
       <Panel>
         <PanelHeader>
-          <PanelTitle>Purchases</PanelTitle>
+          <PanelTitle>Recent purchases</PanelTitle>
           <span className="mono ml-auto text-xs text-ink-faint">
             {peso(purchaseSpend, { whole: true })}
           </span>

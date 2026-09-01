@@ -23,4 +23,5 @@ export const PENDING_CONTEXTS = [
   "Warranty slips and warranty claim tickets",
   "The Viber/SMS outbox (message templates are live under Settings)",
   "Buy-back / trade-in acquisitions (create, IMEI check, complete) — POS can spend a completed acquisition as tender, but not create one here",
+  "Sales filtered by customer, so a customer's purchases show only the recent ones held in the cache",
 ] as const;

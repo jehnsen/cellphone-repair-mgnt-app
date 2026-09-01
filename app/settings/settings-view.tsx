@@ -43,15 +43,26 @@ import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { ApiError, toastError } from "@/lib/api/errors";
 import { mergeFieldsOf } from "@/lib/api/mappers";
 import { count } from "@/lib/format";
+import { ROLE_BLURB, ROLE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
-import type { BranchPatch, SettingPatch } from "@/lib/shop/contract";
 import type {
+  BranchPatch,
+  BranchRecordPatch,
+  NewBranchInput,
+  NewUserInput,
+  SettingPatch,
+  UserPatch,
+} from "@/lib/shop/contract";
+import type {
+  BranchKind,
   BranchProfile,
+  BranchSummary,
   DeviceBrand,
   DeviceModel,
   MessageChannel,
   MessageEventKey,
   MessageTemplate,
+  Role,
   ShopSetting,
   User,
 } from "@/lib/types";
@@ -70,6 +81,9 @@ import type {
  * "not permitted" state rather than an error.
  */
 export function SettingsView() {
+  const { can } = useShop();
+  const canManageStaff = can("users.manage");
+
   return (
     <div className="page space-y-4 sm:space-y-5">
       <PageHeader
@@ -95,6 +109,13 @@ export function SettingsView() {
           <TabsTrigger value="templates">
             <MessageSquareText aria-hidden /> Message templates
           </TabsTrigger>
+          {/* Staff is owner-only: the server refuses the cross-branch read
+              to anyone else, and the tab reports that plainly. */}
+          {canManageStaff ? (
+            <TabsTrigger value="staff">
+              <UserCog aria-hidden /> Staff
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="connection" className="space-y-4 pt-4 sm:space-y-5">
@@ -112,6 +133,11 @@ export function SettingsView() {
         <TabsContent value="templates" className="pt-4">
           <TemplatesTab />
         </TabsContent>
+        {canManageStaff ? (
+          <TabsContent value="staff" className="pt-4">
+            <StaffTab />
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   );
@@ -430,6 +456,9 @@ function draftFromBranch(branch: BranchProfile): BranchDraft {
 }
 
 function BranchTab() {
+  const { can } = useShop();
+  /* Same gate as Staff: the server grants branch writes to the owner alone. */
+  const canManageBranches = can("users.manage");
   const query = useQuery((api) => api.getBranch(), []);
   const save = useMutation((api, patch: BranchPatch) => api.updateBranch(patch));
 
@@ -502,10 +531,15 @@ function BranchTab() {
 
   return (
     <div className="space-y-4">
+      {/* Owner-only, like the server: adding a branch is a 403 for anyone
+          else, so the roster is absent rather than shown broken. */}
+      {canManageBranches ? <BranchRoster /> : null}
+
       <p className="text-xs leading-relaxed text-ink-soft">
-        This is the shop's own record — its name, address, tax details, and the
-        header and footer that print on every receipt. Changes take effect on the
-        next print, no reload needed.
+        Below is {canManageBranches ? "your own branch's" : "the shop's own"} full
+        record — its name, address, tax details, and the header and footer that
+        print on every receipt. Changes take effect on the next print, no reload
+        needed.
       </p>
 
       <Panel>
@@ -1780,6 +1814,646 @@ function ModelDialog({
  * A 403 on these tabs means the account lacks `settings.manage` — a fact of
  * the sign-in, not a fault to retry. Anything else is a real error.
  */
+
+/* ── Staff ───────────────────────────────────────────────────────────── */
+
+/**
+ * Who can sign in, and as what.
+ *
+ * Deliberately reaches across both branches rather than following the branch
+ * switcher: the owner manages the sales floor's cashiers from here, and a list
+ * that changed under the switcher would hide half the staff without saying so.
+ * `getUsers` asks for every branch; the server refuses anyone without
+ * `branches.view_all`, which the "not permitted" state below reports plainly.
+ *
+ * Deleting is a soft delete server-side — the person stops signing in, and the
+ * tickets and sales they handled keep their name.
+ */
+function StaffTab() {
+  const { user: self, branches } = useShop();
+  const usersQuery = useQuery((api) => api.getUsers(), []);
+  const [dialog, setDialog] = useState<
+    { mode: "new" } | { mode: "edit"; staff: User } | null
+  >(null);
+  const [removing, setRemoving] = useState<User | null>(null);
+
+  const remove = useMutation((api, id: string) => api.deleteUser(id));
+
+  const users = usersQuery.data ?? [];
+
+  /* Grouped by branch, so "who works at the sales floor" is one glance. */
+  const groups = useMemo(() => {
+    const map = new Map<string, User[]>();
+    for (const row of [...users].sort((a, b) => a.name.localeCompare(b.name))) {
+      const key = row.branchName || "No branch";
+      const list = map.get(key) ?? [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [users]);
+
+  if (usersQuery.loading && !usersQuery.data) {
+    return (
+      <Panel>
+        <LoadingRows rows={6} />
+      </Panel>
+    );
+  }
+  if (usersQuery.error) {
+    return permissionOr(usersQuery.error, "manage staff", usersQuery.refetch);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
+          Everyone who can sign in, at either branch. A cashier sees only the
+          branch they are assigned to — moving them here moves what they can
+          reach. Removing someone stops the sign-in; the work they already
+          handled keeps their name.
+        </p>
+        <Button size="sm" onClick={() => setDialog({ mode: "new" })}>
+          <Plus aria-hidden /> New staff account
+        </Button>
+      </div>
+
+      {users.length === 0 ? (
+        <Panel>
+          <EmptyState
+            icon={UserCog}
+            title="No staff accounts yet."
+            body="Add an account for each person who works the counter, so their sales and job orders are filed under their own name."
+          />
+        </Panel>
+      ) : (
+        groups.map(([branchName, rows]) => (
+          <Panel key={branchName}>
+            <PanelHeader>
+              <PanelTitle>{branchName}</PanelTitle>
+              <span className="mono ml-auto text-xs text-ink-faint">
+                {count(rows.length)}
+              </span>
+            </PanelHeader>
+            <ul className="divide-y divide-rule-soft">
+              {rows.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:px-4"
+                >
+                  <span className="mono grid size-7 shrink-0 place-items-center rounded-full bg-ink text-[0.625rem] font-semibold text-paper">
+                    {row.initials}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">
+                      {row.name}
+                      {row.id === self.id ? (
+                        <span className="ml-1.5 text-xs font-normal text-ink-faint">
+                          (you)
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="mono truncate text-xs text-ink-faint">
+                      {row.employeeCode ? `${row.employeeCode} · ` : ""}
+                      {row.email ?? "no email"}
+                    </p>
+                  </div>
+
+                  <Badge variant={row.active ? "outline" : "secondary"}>
+                    {ROLE_LABEL[row.role]}
+                  </Badge>
+                  {!row.active ? (
+                    <span className="text-xs text-ink-faint">Inactive</span>
+                  ) : null}
+
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setDialog({ mode: "edit", staff: row })}
+                    >
+                      Edit
+                    </Button>
+                    {/* Never offer to delete the account you are signed in as:
+                        it would end the session mid-edit. */}
+                    {row.id !== self.id ? (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => setRemoving(row)}
+                        aria-label={`Remove ${row.name}`}
+                      >
+                        <Trash2 aria-hidden />
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ))
+      )}
+
+      {dialog ? (
+        <StaffDialog
+          staff={dialog.mode === "edit" ? dialog.staff : undefined}
+          branches={branches}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog(null);
+            usersQuery.refetch();
+          }}
+        />
+      ) : null}
+
+      {removing ? (
+        <Dialog open onOpenChange={(open) => !open && setRemoving(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Remove {removing.name}?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm leading-relaxed text-ink-soft">
+              They stop being able to sign in. The job orders and sales they
+              handled keep their name, so the shop&rsquo;s history is unchanged.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setRemoving(null)}
+                disabled={remove.pending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={remove.pending}
+                onClick={async () => {
+                  const { error } = await remove.mutate(removing.id);
+                  if (error) {
+                    const { message, description } = toastError(
+                      error,
+                      "Could not remove the account.",
+                    );
+                    toast.error(message, { description });
+                  } else {
+                    toast.success(`${removing.name} removed.`);
+                    setRemoving(null);
+                    usersQuery.refetch();
+                  }
+                }}
+              >
+                {remove.pending ? "Removing…" : "Remove"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}
+
+/** The roles this screen can assign, in the order they read on the floor. */
+const ASSIGNABLE_ROLES: Role[] = ["cashier", "technician", "manager", "owner"];
+
+function StaffDialog({
+  staff,
+  branches,
+  onClose,
+  onSaved,
+}: {
+  staff?: User;
+  branches: BranchSummary[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = Boolean(staff);
+  const create = useMutation((api, input: NewUserInput) => api.createUser(input));
+  const update = useMutation((api, input: { id: string; patch: UserPatch }) =>
+    api.updateUser(input.id, input.patch),
+  );
+  const pending = create.pending || update.pending;
+
+  const [name, setName] = useState(staff?.name ?? "");
+  const [email, setEmail] = useState(staff?.email ?? "");
+  const [employeeCode, setEmployeeCode] = useState(staff?.employeeCode ?? "");
+  const [role, setRole] = useState<Role>(staff?.role ?? "cashier");
+  const [branchId, setBranchId] = useState(staff?.branchId ?? branches[0]?.id ?? "");
+  const [password, setPassword] = useState("");
+  const [active, setActive] = useState(staff?.active ?? true);
+
+  /* The API enforces 8 characters; say so before the round trip rather than
+     surfacing a validation error the user could have avoided. */
+  const passwordTooShort = password.length > 0 && password.length < 8;
+  const canSave =
+    name.trim().length > 0 &&
+    email.trim().length > 0 &&
+    employeeCode.trim().length > 0 &&
+    branchId.length > 0 &&
+    !passwordTooShort &&
+    (isEdit || password.length >= 8) &&
+    !pending;
+
+  const submit = async () => {
+    if (!canSave) return;
+
+    const outcome = isEdit
+      ? await update.mutate({
+          id: staff!.id,
+          patch: {
+            name: name.trim(),
+            email: email.trim(),
+            employeeCode: employeeCode.trim(),
+            role,
+            branchId,
+            active,
+            /* Blank means "leave the current password alone". */
+            ...(password ? { password } : {}),
+          },
+        })
+      : await create.mutate({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          role,
+          employeeCode: employeeCode.trim(),
+          branchId,
+        });
+
+    if (outcome.data) {
+      toast.success(isEdit ? "Account updated." : `${outcome.data.name} added.`);
+      onSaved();
+    } else if (outcome.error) {
+      const { message, description } = toastError(
+        outcome.error,
+        "Could not save the account.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {isEdit ? `Edit ${staff!.name}` : "New staff account"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="staff-name">Name</Label>
+            <Input
+              id="staff-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Rosa Delgado"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="staff-email">Email</Label>
+              <Input
+                id="staff-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="rosa@example.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="staff-code">Employee code</Label>
+              <Input
+                id="staff-code"
+                value={employeeCode}
+                onChange={(e) => setEmployeeCode(e.target.value)}
+                placeholder="EMP-0042"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="staff-role">Role</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                <SelectTrigger id="staff-role" className="w-full min-w-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNABLE_ROLES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {ROLE_LABEL[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="staff-branch">Branch</Label>
+              <Select value={branchId} onValueChange={setBranchId}>
+                {/* `w-full` + `min-w-0`: a long branch name must truncate
+                    inside its grid column, not push past the chevron. */}
+                <SelectTrigger id="staff-branch" className="w-full min-w-0">
+                  <SelectValue className="truncate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <p className="text-xs leading-relaxed text-ink-soft">
+            {ROLE_BLURB[role]}
+          </p>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="staff-password">
+              {isEdit ? "New password" : "Password"}
+            </Label>
+            <Input
+              id="staff-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={isEdit ? "Leave blank to keep the current one" : "At least 8 characters"}
+            />
+            {passwordTooShort ? (
+              <p className="text-xs text-stamp-ink">
+                At least 8 characters.
+              </p>
+            ) : null}
+          </div>
+
+          {isEdit ? (
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <Switch checked={active} onCheckedChange={setActive} />
+              {active ? "Active — can sign in" : "Inactive — cannot sign in"}
+            </label>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {pending ? "Saving…" : isEdit ? "Save changes" : "Add account"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+/**
+ * Every branch the shop runs, and the way to add another.
+ *
+ * Owner-only, mirroring the server: `POST /branches` is a 403 for a manager,
+ * so the panel is absent rather than shown broken. Branches are never deleted
+ * — the API answers 405 — because a closed site's tickets and sales still have
+ * to resolve. Closing one deactivates it: it drops out of the branch switcher
+ * and the staff form, and its history stays intact.
+ *
+ * Only the shop's own record is editable in full (name, address, tax details,
+ * receipt text) in the panel below; this one covers what makes a branch a
+ * branch — what it is called, its ticket code, and whether it repairs.
+ */
+function BranchRoster() {
+  const { branch: ownBranch } = useShop();
+  const query = useQuery((api) => api.getBranches({ includeInactive: true }), []);
+  const [dialog, setDialog] = useState<
+    { mode: "new" } | { mode: "edit"; branch: BranchSummary } | null
+  >(null);
+
+  const branches = query.data ?? [];
+
+  if (query.loading && !query.data) {
+    return (
+      <Panel>
+        <LoadingRows rows={3} />
+      </Panel>
+    );
+  }
+  if (query.error) {
+    return permissionOr(query.error, "manage branches", query.refetch);
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
+          The sites this shop runs. A sales-only branch has no repair bench, so
+          it takes no job orders. A branch is never deleted — closing one hides
+          it from the switcher and from new staff, and its past work keeps
+          resolving.
+        </p>
+        <Button size="sm" onClick={() => setDialog({ mode: "new" })}>
+          <Plus aria-hidden /> New branch
+        </Button>
+      </div>
+
+      <Panel>
+        <PanelHeader>
+          <Building2 className="size-3.5 text-ink-faint" aria-hidden />
+          <PanelTitle>Branches</PanelTitle>
+          <span className="mono ml-auto text-xs text-ink-faint">
+            {count(branches.length)}
+          </span>
+        </PanelHeader>
+
+        {branches.length === 0 ? (
+          <EmptyState
+            icon={Building2}
+            title="No branches yet."
+            body="Add the shop's first site so job orders and sales have somewhere to be filed."
+          />
+        ) : (
+          <ul className="divide-y divide-rule-soft">
+            {branches.map((row) => (
+              <li
+                key={row.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:px-4"
+              >
+                <span className="mono grid size-7 shrink-0 place-items-center rounded-sm border border-rule text-[0.625rem] font-semibold text-ink-soft">
+                  {row.code}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {row.name}
+                    {row.id === ownBranch?.ulid ? (
+                      <span className="ml-1.5 text-xs font-normal text-ink-faint">
+                        (yours)
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-xs text-ink-faint">
+                    {row.offersRepairs ? "Repairs and sales" : "Sales only"}
+                  </p>
+                </div>
+
+                {!row.active ? (
+                  <Badge variant="secondary">Closed</Badge>
+                ) : null}
+
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => setDialog({ mode: "edit", branch: row })}
+                >
+                  Edit
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      {dialog ? (
+        <BranchDialog
+          branch={dialog.mode === "edit" ? dialog.branch : undefined}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog(null);
+            query.refetch();
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function BranchDialog({
+  branch,
+  onClose,
+  onSaved,
+}: {
+  branch?: BranchSummary;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = Boolean(branch);
+  const create = useMutation((api, input: NewBranchInput) => api.createBranch(input));
+  const update = useMutation((api, input: { id: string; patch: BranchRecordPatch }) =>
+    api.updateBranchById(input.id, input.patch),
+  );
+  const pending = create.pending || update.pending;
+
+  const [name, setName] = useState(branch?.name ?? "");
+  const [code, setCode] = useState(branch?.code ?? "");
+  const [kind, setKind] = useState<BranchKind>(branch?.kind ?? "sales_only");
+  const [active, setActive] = useState(branch?.active ?? true);
+
+  const canSave = name.trim().length > 0 && code.trim().length > 0 && !pending;
+
+  const submit = async () => {
+    if (!canSave) return;
+    const outcome = isEdit
+      ? await update.mutate({
+          id: branch!.id,
+          patch: { name: name.trim(), code: code.trim().toUpperCase(), kind, active },
+        })
+      : await create.mutate({
+          name: name.trim(),
+          code: code.trim().toUpperCase(),
+          kind,
+        });
+
+    if (outcome.data) {
+      toast.success(isEdit ? "Branch saved." : `${outcome.data.name} added.`);
+      onSaved();
+    } else if (outcome.error) {
+      const { message, description } = toastError(
+        outcome.error,
+        "Could not save the branch.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? `Edit ${branch!.name}` : "New branch"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="branch-name">Name</Label>
+            <Input
+              id="branch-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nelson Sales Center"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="branch-code">Code</Label>
+            <Input
+              id="branch-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="SC"
+              className="mono"
+            />
+            <p className="text-xs text-ink-faint">
+              Prints inside every ticket number — <span className="mono">JO-{code || "SC"}-202609-0001</span>. Must be unique.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="branch-kind">What it does</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as BranchKind)}>
+              <SelectTrigger id="branch-kind" className="w-full min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="repair_and_sales">Repairs and sales</SelectItem>
+                <SelectItem value="sales_only">Sales only</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-ink-faint">
+              {kind === "sales_only"
+                ? "A shop floor: appliances, handsets, laptops, accessories. Takes no job orders."
+                : "A full site: takes units in at the counter and repairs them."}
+            </p>
+          </div>
+
+          {isEdit ? (
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <Switch checked={active} onCheckedChange={setActive} />
+              {active
+                ? "Open — staff can be assigned here"
+                : "Closed — hidden from the switcher; past work is kept"}
+            </label>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {pending ? "Saving…" : isEdit ? "Save changes" : "Add branch"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function permissionOr(error: Error, action: string, onRetry: () => void) {
   if (error instanceof ApiError && error.code === "FORBIDDEN") {
     return (

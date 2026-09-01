@@ -3,7 +3,7 @@
 Next.js 15 (App Router) · TypeScript · Tailwind v4 · shadcn/ui · lucide-react
 
 Intake → repair board → release, plus POS, inventory, customers, and reports
-for a single-branch Metro Manila repair shop.
+for a two-branch Metro Manila shop: a repair-and-sales site and a sales-only floor.
 
 ---
 
@@ -38,7 +38,7 @@ npm run dev
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api/v1
 ```
 
-Sign in with a seeded account — `ricardo.santos@fixmo.test` / `password` is the
+Sign in with a seeded account — `nelson.bonalos@gmail.com` / `password` is the
 owner; see the backend's `database/seeders/UserSeeder.php` for the rest.
 **Settings → Connection** shows the API this browser is pointed at and what it
 loaded.

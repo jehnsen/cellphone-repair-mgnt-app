@@ -27,7 +27,13 @@ import {
 import { EMPTY_DB, shopReducer, type ShopAction } from "@/lib/shop/reducer";
 import type { ShopApi, ShopReports } from "@/lib/shop/contract";
 import type { BranchDto } from "@/lib/api/dto";
-import type { Database, Permission, Role, User } from "@/lib/types";
+import type {
+  BranchSummary,
+  Database,
+  Permission,
+  Role,
+  User,
+} from "@/lib/types";
 
 /**
  * One provider, one source of truth: the Laravel API.
@@ -39,6 +45,12 @@ import type { Database, Permission, Role, User } from "@/lib/types";
  */
 
 export type AuthState = "loading" | "signed-out" | "signed-in" | "unreachable";
+
+/**
+ * What the app is looking at: one branch by ULID, or every branch at once.
+ * Mirrors the API's `?branch=` — `"all"` is the server's own literal.
+ */
+export type BranchScope = string | "all";
 
 interface ShopContextValue {
   db: Database;
@@ -71,6 +83,23 @@ interface ShopContextValue {
     password?: string;
   }) => Promise<User>;
 
+  /**
+   * The branch the app is currently pointed at, and the ones it may point at.
+   *
+   * `branch` is the signed-in user's home branch — where their writes land.
+   * `branchScope` is what is being *looked at*: a branch id, or `"all"` for
+   * every branch at once. Widening past their own branch needs
+   * `branches.view_all` server-side, so a cashier has one branch in
+   * `branches` and cannot change scope.
+   */
+  branch: BranchDto | null;
+  branches: BranchSummary[];
+  branchScope: BranchScope;
+  /** Ignored without `branch.switch`; the server is the real gate. */
+  setBranchScope: (scope: BranchScope) => void;
+  /** True when this account can see more than the one branch it works at. */
+  canSwitchBranch: boolean;
+
   user: User;
   role: Role;
   can: (permission: Permission) => boolean;
@@ -97,6 +126,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [branch, setBranch] = useState<BranchDto | null>(null);
+  const [branches, setBranches] = useState<BranchSummary[]>([]);
+  /* Which branch is being looked at: a ULID, or "all". Null until the
+     session resolves a home branch. */
+  const [branchScope, setScopeState] = useState<BranchScope | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   /* The API reads the newest cache without being rebuilt on every render. */
@@ -137,8 +170,23 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     [client, dispatch, dispatchQuiet],
   );
 
+  /**
+   * Fetch the shop under one branch scope.
+   *
+   * `scope` is applied *before* anything is fetched, so the first paint is
+   * already branch-correct rather than showing the whole shop for a moment.
+   * It defaults to the user's own branch; an owner can pass another branch,
+   * or null for all of them.
+   */
   const load = useCallback(
-    async (nextBranch: BranchDto | null, self: User | null) => {
+    async (
+      nextBranch: BranchDto | null,
+      self: User | null,
+      scope: BranchScope | null = nextBranch?.ulid ?? null,
+    ) => {
+      client.setBranchScope(scope);
+      setScopeState(scope);
+
       const result = await bootstrapShop(client, nextBranch, self);
       rawDispatch({ type: "hydrate", db: result.db });
       setVersion((value) => value + 1);
@@ -146,6 +194,25 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setReady(true);
     },
     [client],
+  );
+
+  /* What this account may look at. Only meaningful for an owner or manager;
+     a cashier is scoped server-side and gets their own branch back (or a
+     403, which `getBranches` reports as an empty list). */
+  const loadBranches = useCallback(
+    async (self: User | null) => {
+      if (!self || !can(self.role, "branch.switch")) {
+        setBranches([]);
+        return;
+      }
+      try {
+        setBranches(await api.getBranches());
+      } catch {
+        /* A switcher that cannot load is simply not offered. */
+        setBranches([]);
+      }
+    },
+    [api],
   );
 
   const fail = useCallback((caught: unknown) => {
@@ -182,8 +249,18 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setAuth("signed-in");
     setAuthError(null);
 
-    load(session.branch, self).catch(fail);
-  }, [client, load, fail, attempt]);
+    load(session.branch, self)
+      .then(() => loadBranches(self))
+      .catch(fail);
+  }, [client, load, loadBranches, fail, attempt]);
+
+  /* Adding, renaming, or closing a branch has to reach the switcher without a
+     reload. `version` bumps on every write, so re-read the list when it moves —
+     cheap, and only ever for an account that can switch in the first place. */
+  useEffect(() => {
+    if (auth !== "signed-in" || !version) return;
+    void loadBranches(userRef.current);
+  }, [version, auth, loadBranches]);
 
   /* A token can die between page loads; when it does, stop pretending. */
   useEffect(() => {
@@ -210,6 +287,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         setBranch(session.branch);
         setAuth("signed-in");
         await load(session.branch, self);
+        await loadBranches(self);
         return true;
       } catch (caught) {
         const error =
@@ -235,6 +313,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     rawDispatch({ type: "hydrate", db: EMPTY_DB });
     setSessionUser(null);
     setBranch(null);
+    setBranches([]);
+    setScopeState(null);
+    client.setBranchScope(null);
     setReady(false);
     setAuth("signed-out");
   }, [client]);
@@ -263,6 +344,29 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   );
 
   const user = sessionUser ?? PENDING_USER;
+  const canSwitchBranch = can(user.role, "branch.switch") && branches.length > 1;
+
+  /**
+   * Point the app at another branch — or at all of them, with null.
+   *
+   * `db` is a cache of rows fetched under the *previous* scope, so it is
+   * dropped rather than merged: a board still holding the other branch's
+   * tickets is worse than a moment of loading. The HTTP cache is keyed on the
+   * branch param and cleared by `setBranchScope` for the same reason.
+   */
+  const setBranchScope = useCallback(
+    (next: BranchScope) => {
+      if (!can(user.role, "branch.switch")) return;
+      if (next === branchScope) return;
+
+      rawDispatch({ type: "hydrate", db: EMPTY_DB });
+      setReady(false);
+
+      load(branch, sessionUser, next).catch(fail);
+    },
+    [client, branchScope, user.role, branch, sessionUser, load, fail],
+  );
+
 
   const value = useMemo<ShopContextValue>(
     () => ({
@@ -282,8 +386,15 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       user,
       role: user.role,
       can: (permission: Permission) => can(user.role, permission),
+      branch,
+      branches,
+      /* Before the session resolves, the scope is the user's own branch —
+         the server's default, and never a wider view than they hold. */
+      branchScope: branchScope ?? branch?.ulid ?? "",
+      setBranchScope,
+      canSwitchBranch,
     }),
-    [db, api, reports, version, ready, auth, authError, warnings, signIn, signOut, retry, updateProfile, user],
+    [db, api, reports, version, ready, auth, authError, warnings, signIn, signOut, retry, updateProfile, user, branch, branches, branchScope, setBranchScope, canSwitchBranch],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;

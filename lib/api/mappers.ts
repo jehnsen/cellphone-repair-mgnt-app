@@ -1,7 +1,11 @@
 import { money, initialsOf } from "@/lib/format";
+import type { DashboardSummary } from "@/lib/shop/contract";
 import { toTicketPayment } from "@/lib/api/mappers-commerce";
 import type {
   BranchDto,
+  BoardDto,
+  DashboardDto,
+  DashboardMetricsDto,
   CustomerDeviceDto,
   CustomerDto,
   StoreCreditDto,
@@ -23,6 +27,7 @@ import type {
 } from "@/lib/api/dto";
 import type {
   BranchProfile,
+  BranchSummary,
   ConditionCheck,
   Customer,
   DeviceBrand,
@@ -111,6 +116,10 @@ export function toUser(dto: UserDto): User {
     mobile: undefined,
     active: dto.is_active ?? true,
     isTechnician: roles.includes("technician"),
+    employeeCode: dto.employee_code || undefined,
+    branchId: dto.branch?.ulid,
+    branchName: dto.branch?.name,
+    branchCode: dto.branch?.code,
   };
 }
 
@@ -563,6 +572,82 @@ export function toBranchProfile(dto: BranchDto): BranchProfile {
     receiptHeaderText: dto.receipt_header_text ?? "",
     receiptFooterText: dto.receipt_footer_text ?? "",
     timezone: dto.timezone ?? "Asia/Manila",
+  };
+}
+
+/**
+ * A branch as the switcher needs it. `type` is the server's word; when it is
+ * missing we fall back to `offers_repairs`, and if that is missing too we
+ * assume a full repair branch — the safe reading, since it hides nothing.
+ */
+/**
+ * `GET /dashboard` → the day sheet's figures.
+ *
+ * Money arrives as a decimal string; `stock_value` is simply absent for a
+ * caller without `reports.margin.view`, which becomes null rather than 0 —
+ * the screen then omits the figure instead of claiming an empty stockroom.
+ * `byStatus` stays empty here: the endpoint reports totals, and the board's
+ * own column counts come from `/tickets/board`.
+ */
+export function toDashboardSummary(
+  dto: DashboardDto,
+  board?: BoardDto | null,
+): DashboardSummary {
+  const metrics = (m: DashboardMetricsDto | null | undefined) => ({
+    todaySales: num(m?.sales?.gross_today),
+    todaySaleCount: Math.trunc(num(m?.sales?.count_today)),
+    openTickets: Math.trunc(num(m?.repairs?.open)),
+    readyForPickup: Math.trunc(num(m?.repairs?.ready_for_pickup)),
+    awaitingApproval: Math.trunc(num(m?.repairs?.awaiting_approval)),
+    unclaimed: Math.trunc(num(m?.repairs?.unclaimed)),
+    lowStock: Math.trunc(num(m?.inventory?.low_stock_items)),
+    stockValue:
+      m?.inventory?.stock_value == null ? null : num(m.inventory.stock_value),
+  });
+
+  return {
+    ...metrics(dto.totals),
+    /* `/dashboard` reports totals only; lateness and the per-status split come
+       from the board, whose cards are the whole open set. Without it both stay
+       at zero rather than being guessed from the local cache. */
+    byStatus: (board?.columns ?? []).flatMap((column) =>
+      /* An exact match, not `toTicketStatus`: that falls back to "received",
+         which would file an unknown column under a real status. */
+      (TICKET_STATUSES as string[]).includes(column.status)
+        ? [
+            {
+              status: column.status as TicketStatus,
+              count: Math.trunc(num(column.count)),
+            },
+          ]
+        : [],
+    ),
+    overdue: (board?.columns ?? []).reduce(
+      (total, column) =>
+        total + (column.tickets ?? []).filter((card) => card.is_overdue).length,
+      0,
+    ),
+    cashOnHand: null,
+    openShiftId: null,
+    branches: (dto.branches ?? []).map((row) => ({
+      id: row.ulid,
+      name: row.name ?? "",
+      code: row.code ?? "",
+      offersRepairs: row.offers_repairs ?? row.type !== "sales_only",
+      ...metrics(row.metrics),
+    })),
+  };
+}
+
+export function toBranchSummary(dto: BranchDto): BranchSummary {
+  const offersRepairs = dto.offers_repairs ?? dto.type !== "sales_only";
+  return {
+    id: dto.ulid,
+    name: dto.name ?? "",
+    code: dto.code ?? "",
+    kind: dto.type === "sales_only" ? "sales_only" : "repair_and_sales",
+    offersRepairs,
+    active: dto.is_active ?? true,
   };
 }
 

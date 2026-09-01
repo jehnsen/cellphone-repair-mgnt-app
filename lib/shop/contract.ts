@@ -1,5 +1,8 @@
 import type {
+  BranchKind,
   BranchProfile,
+  BranchSummary,
+  Role,
   ConditionCheck,
   Customer,
   DefectArea,
@@ -180,6 +183,34 @@ export interface DashboardSummary {
   openShiftId: ID | null;
   unclaimed: number;
   awaitingApproval: number;
+  /**
+   * Retail value of stock on hand, or null when the caller lacks
+   * `reports.margin.view` — the server sends counts only in that case, so a
+   * cashier's dashboard simply omits the figure rather than showing a zero
+   * that reads as an empty stockroom.
+   */
+  stockValue: number | null;
+  /**
+   * Per-branch split, present only when looking at every branch at once.
+   * Empty on a single-branch view.
+   */
+  branches: DashboardBranchRow[];
+}
+
+/** One branch's own figures inside an all-branches dashboard. */
+export interface DashboardBranchRow {
+  id: ID;
+  name: string;
+  code: string;
+  offersRepairs: boolean;
+  todaySales: number;
+  todaySaleCount: number;
+  openTickets: number;
+  readyForPickup: number;
+  awaitingApproval: number;
+  unclaimed: number;
+  lowStock: number;
+  stockValue: number | null;
 }
 
 export interface SaveFindingInput {
@@ -333,7 +364,15 @@ export interface ShopApi {
     category?: string;
   }): Promise<ServiceItem>;
 
+  /* ── Staff ────────────────────────────────────────────────────────
+     Everyone the caller may see. Branch-scoped like every other read, so
+     an owner listing staff across the business reads it under the
+     all-branches scope; a cashier gets a 403 and the screen says so. */
   getUsers(): Promise<User[]>;
+  createUser(input: NewUserInput): Promise<User>;
+  updateUser(id: ID, patch: UserPatch): Promise<User>;
+  /** Soft-deletes on the server: the row survives, but stops signing in. */
+  deleteUser(id: ID): Promise<void>;
   /**
    * Update the signed-in user's own record via `PATCH /users/{ulid}`. Any of
    * `name`, `email`, `password` (min 8). The API has no dedicated
@@ -452,6 +491,22 @@ export interface ShopApi {
   getBranch(): Promise<BranchProfile>;
   updateBranch(patch: BranchPatch): Promise<BranchProfile>;
 
+  /* ── The branches this account may work in ────────────────────────
+     Everything the token can see. A cashier is scoped server-side to their
+     own branch and gets a one-row list (or a 403, which the switcher renders
+     as "no switching" rather than an error), so the UI never has to trust
+     `branch.switch` alone.
+
+     Active-only by default, which is what the switcher wants: you cannot
+     work out of a closed site. Branch management passes
+     `includeInactive` so a closed branch can be seen and reopened. */
+  getBranches(options?: { includeInactive?: boolean }): Promise<BranchSummary[]>;
+  createBranch(input: NewBranchInput): Promise<BranchSummary>;
+  /* Edits any branch by id — `updateBranch` above only ever touches the
+     caller's own. Branches are never deleted (the API answers 405): a site
+     that closes is deactivated, so its past tickets and sales keep resolving. */
+  updateBranchById(id: ID, patch: BranchRecordPatch): Promise<BranchSummary>;
+
   /* ── Branch settings ──────────────────────────────────────────────
      Key/value config for the caller's own branch, each entry already
      resolved against the shop-wide default. Requires `settings.manage`. */
@@ -505,6 +560,47 @@ export interface NewMessageTemplateInput {
  * Every field the branch form can change. All optional — only what is passed
  * is written. `code` and `timezone` are not editable through this screen.
  */
+/** What `POST /branches` requires; the rest of the record is filled in after. */
+export interface NewBranchInput {
+  name: string;
+  /** Short code shown on ticket numbers (`JO-AL-…`); unique across the shop. */
+  code: string;
+  kind: BranchKind;
+}
+
+/** A partial update to any branch row. Only the keys present are sent. */
+export interface BranchRecordPatch {
+  name?: string;
+  code?: string;
+  kind?: BranchKind;
+  active?: boolean;
+}
+
+/** What `POST /users` requires; every field is mandatory server-side. */
+export interface NewUserInput {
+  name: string;
+  email: string;
+  /** At least 8 characters, enforced by the API. */
+  password: string;
+  role: Role;
+  employeeCode: string;
+  branchId: ID;
+}
+
+/**
+ * A partial update. Only the keys present are sent, so an untouched field is
+ * never cleared; omit `password` to leave the existing one alone.
+ */
+export interface UserPatch {
+  name?: string;
+  email?: string;
+  password?: string;
+  role?: Role;
+  employeeCode?: string;
+  branchId?: ID;
+  active?: boolean;
+}
+
 export type BranchPatch = Partial<
   Pick<
     BranchProfile,

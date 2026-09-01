@@ -34,7 +34,9 @@ export type Permission =
   | "reports.view"
   | "reports.financial"
   | "settings.manage"
-  | "users.manage";
+  | "users.manage"
+  /** See more than one branch, and switch which one the app is pointed at. */
+  | "branch.switch";
 
 export interface User {
   id: ID;
@@ -47,6 +49,12 @@ export interface User {
   active: boolean;
   /** Technicians appear on the board and in throughput reports. */
   isTechnician: boolean;
+  /** The staff number the shop knows them by; unique across the business. */
+  employeeCode?: string;
+  /** Which site they work at — where their writes land. */
+  branchId?: ID;
+  branchName?: string;
+  branchCode?: string;
 }
 
 /* ── Customers ──────────────────────────────────────────────────────── */
@@ -703,6 +711,26 @@ export interface ShopProfile {
   receiptFooter: string;
   /** Days past the promised date before a ticket is flagged unclaimed. */
   unclaimedAfterDays: number;
+}
+
+/**
+ * What a branch actually does. The repair shop runs both; the second site is
+ * a sales-only floor (appliances, handsets, laptops, accessories), so it has
+ * no repair board of its own and no technicians.
+ */
+export type BranchKind = "repair_and_sales" | "sales_only";
+
+/**
+ * A branch as the switcher and the branch-scope banner need it — identity plus
+ * what it does. The full editable row is `BranchProfile`.
+ */
+export interface BranchSummary {
+  id: ID;
+  name: string;
+  code: string;
+  kind: BranchKind;
+  offersRepairs: boolean;
+  active: boolean;
 }
 
 /**

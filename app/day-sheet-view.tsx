@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import type { Ticket } from "@/lib/types";
 
 export function DaySheetView() {
-  const { db, user } = useShop();
+  const { db, user, branch, branches, branchScope } = useShop();
   const {
     data: summary,
     loading,
@@ -105,12 +105,24 @@ export function DaySheetView() {
 
   const shiftOpen = summary?.openShiftId != null;
 
+  /* Say which branch these figures cover. An owner can be looking at one
+     branch or all of them, and a count read against the wrong site is worse
+     than no count — so the scope is named rather than implied. */
+  const scopeName =
+    branchScope === "all"
+      ? "all branches"
+      : (branches.find((row) => row.id === branchScope)?.name ?? branch?.name);
+
   return (
     <div className="page space-y-4 sm:space-y-5">
       <PageHeader
         eyebrow={`Good ${greeting()}, ${user.name.split(" ")[0]}`}
         title="Day sheet"
-        description="What is late, what is waiting, and what needs a decision — before the counter opens."
+        description={
+          scopeName
+            ? `What is late, what is waiting, and what needs a decision at ${scopeName}.`
+            : "What is late, what is waiting, and what needs a decision — before the counter opens."
+        }
         actions={
           <>
             <Button asChild size="sm">

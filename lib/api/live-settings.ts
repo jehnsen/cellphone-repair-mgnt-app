@@ -4,6 +4,7 @@ import type { LiveContext } from "@/lib/api/live-api";
 import type { BranchDto, MessageTemplateDto, SettingDto } from "@/lib/api/dto";
 import {
   toBranchProfile,
+  toBranchSummary,
   toMessageTemplate,
   toShopSetting,
 } from "@/lib/api/mappers";
@@ -44,6 +45,53 @@ export function createSettingsApi(
     async getBranch() {
       const { data } = await client.get<BranchDto>(`/branches/${branchUlid()}`);
       return toBranchProfile(data);
+    },
+
+    /* Whatever this token is allowed to see. A cashier is scoped server-side
+       to their own branch, so this comes back with one row — or 403s, which
+       is not an error here: it just means there is nothing to switch to. */
+    async getBranches(options = {}) {
+      try {
+        const rows = await client.getAll<BranchDto>("/branches", {
+          query: { sort: "name" },
+        });
+        const all = rows.map(toBranchSummary);
+        /* The switcher wants somewhere you can actually work; management wants
+           the closed sites too, so they can be reopened. */
+        return options.includeInactive ? all : all.filter((b) => b.active);
+      } catch (error) {
+        if (error instanceof ApiError && error.code === "FORBIDDEN") return [];
+        throw error;
+      }
+    },
+
+    async createBranch(input) {
+      const { data } = await client.post<BranchDto>("/branches", {
+        body: {
+          name: input.name,
+          code: input.code,
+          type: input.kind,
+          offers_repairs: input.kind !== "sales_only",
+          timezone: "Asia/Manila",
+          is_active: true,
+        },
+      });
+      return toBranchSummary(data);
+    },
+
+    async updateBranchById(id, patch) {
+      const body: Record<string, unknown> = {};
+      if (patch.name !== undefined) body.name = patch.name;
+      if (patch.code !== undefined) body.code = patch.code;
+      if (patch.kind !== undefined) {
+        body.type = patch.kind;
+        /* The two travel together: a sales-only floor has no repair bench. */
+        body.offers_repairs = patch.kind !== "sales_only";
+      }
+      if (patch.active !== undefined) body.is_active = patch.active;
+
+      const { data } = await client.patch<BranchDto>(`/branches/${id}`, { body });
+      return toBranchSummary(data);
     },
 
     async updateBranch(patch: BranchPatch) {

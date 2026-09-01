@@ -188,6 +188,25 @@ export function createUnavailableApi(): ShopApi {
     async updateBranch() {
       throw missing("Updating the branch profile", "PATCH /branches/{ulid}");
     },
+    /* Empty means "nothing to switch to", which the switcher hides. */
+    async getBranches() {
+      return [];
+    },
+    async createBranch() {
+      throw missing("Adding a branch", "POST /branches");
+    },
+    async updateBranchById() {
+      throw missing("Editing a branch", "PATCH /branches/{ulid}");
+    },
+    async createUser() {
+      throw missing("Creating a staff account", "POST /users");
+    },
+    async updateUser() {
+      throw missing("Editing a staff account", "PATCH /users/{ulid}");
+    },
+    async deleteUser() {
+      throw missing("Removing a staff account", "DELETE /users/{ulid}");
+    },
     async getSettings() {
       return [];
     },
@@ -217,6 +236,8 @@ export function createUnavailableApi(): ShopApi {
         openShiftId: null,
         unclaimed: 0,
         awaitingApproval: 0,
+        stockValue: null,
+        branches: [],
       };
     },
   };

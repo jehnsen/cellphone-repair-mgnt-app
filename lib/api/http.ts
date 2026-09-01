@@ -76,8 +76,48 @@ interface CacheEntry {
   value: Envelope<unknown>;
 }
 
+/**
+ * Endpoints that take no `?branch=`, so it is never added.
+ *
+ * `/branches` itself must stay unfiltered or the switcher could only ever see
+ * the branch it is already on; the rest are shop-wide catalogs and identity.
+ * Sending the param where it is not supported risks a 400, and asking for a
+ * scope the caller lacks is a 403 — so this list is a correctness guard, not
+ * a tidiness one.
+ */
+const BRANCH_AGNOSTIC = [
+  "/branches",
+  "/auth/",
+  "/device-brands",
+  "/device-models",
+  "/product-categories",
+  "/suppliers",
+];
+
+/** How many times a throttled GET is retried before the error surfaces. */
+const RATE_LIMIT_RETRIES = 3;
+/** Cap on a single wait, so a large `retry_after` cannot hang a screen. */
+const RATE_LIMIT_MAX_WAIT_MS = 10_000;
+/** Used when the server does not say how long to wait. */
+const RATE_LIMIT_FALLBACK_MS = 1_000;
+
 export class HttpClient {
   private token: string | null = null;
+
+  /**
+   * Which branch reads are scoped to, as the API's `?branch=` takes it:
+   * a branch ULID, the literal `"all"`, or null for the server's default.
+   *
+   * Null is *not* "every branch" — the server defaults to the caller's own
+   * branch, so null means "don't ask, take the default". Widening to `"all"`
+   * or another branch needs `branches.view_all` server-side; anyone else asking
+   * gets a 403 rather than a quietly narrowed answer, which is why the UI only
+   * offers the choice to an account that holds it.
+   *
+   * It rides in the URL, so it is part of the GET cache key: switching branch
+   * can never serve the previous branch's rows.
+   */
+  private branch: string | null = null;
 
   /** Identical GETs issued together share one request. */
   private inflight = new Map<string, Promise<Envelope<unknown>>>();
@@ -96,6 +136,35 @@ export class HttpClient {
     return Boolean(this.token);
   }
 
+  /**
+   * Point every subsequent read at one branch, at `"all"`, or at the server's
+   * default with null.
+   */
+  setBranchScope(branch: string | null) {
+    if (this.branch === branch) return;
+    this.branch = branch;
+    /* Rows for the old branch must not answer a question about the new one. */
+    this.invalidate();
+  }
+
+  getBranchScope(): string | null {
+    return this.branch;
+  }
+
+  /** GETs on branch-scoped collections carry the current branch. */
+  private scopedQuery(
+    path: string,
+    query?: Record<string, QueryValue>,
+  ): Record<string, QueryValue> | undefined {
+    /* An explicit `branch` on the call wins: a screen that must see across the
+       business — staff management — says so, rather than inheriting whichever
+       branch the switcher happens to be on. */
+    if (query?.branch !== undefined) return query;
+    if (!this.branch) return query;
+    if (BRANCH_AGNOSTIC.some((prefix) => path.startsWith(prefix))) return query;
+    return { ...query, branch: this.branch };
+  }
+
   /** Drop every cached read. Called after any write. */
   invalidate() {
     this.cache.clear();
@@ -110,7 +179,8 @@ export class HttpClient {
     const isWrite = method !== "GET";
 
     if (!isWrite) {
-      const key = buildUrl(path, options.query);
+      const scoped = { ...options, query: this.scopedQuery(path, options.query) };
+      const key = buildUrl(path, scoped.query);
 
       const fresh = this.cache.get(key);
       if (fresh && Date.now() - fresh.at < GET_CACHE_MS) {
@@ -120,7 +190,7 @@ export class HttpClient {
       const pending = this.inflight.get(key);
       if (pending) return pending as Promise<Envelope<T>>;
 
-      const request = this.send<T>(method, path, options)
+      const request = this.sendWithRetry<T>(method, path, scoped)
         .then((value) => {
           this.cache.set(key, { at: Date.now(), value });
           return value;
@@ -137,6 +207,37 @@ export class HttpClient {
     const result = await this.send<T>(method, path, options);
     this.invalidate();
     return result;
+  }
+
+  /**
+   * A GET that waits out a rate limit rather than failing the screen.
+   *
+   * Loading the shop is a burst — the day sheet, the board, and the catalog all
+   * ask at once, and twice as much under `?branch=all` — which the API throttles.
+   * The server says how long to wait; honour it, briefly and a bounded number
+   * of times, then give up and let the error surface. Reads only: replaying a
+   * write is not this layer's decision to make.
+   */
+  private async sendWithRetry<T>(
+    method: "GET",
+    path: string,
+    options: RequestOptions,
+    attempt = 0,
+  ): Promise<Envelope<T>> {
+    try {
+      return await this.send<T>(method, path, options);
+    } catch (error) {
+      const limited = error instanceof ApiError && error.code === "RATE_LIMITED";
+      if (!limited || attempt >= RATE_LIMIT_RETRIES) throw error;
+
+      const after = Number(error.details?.[0]?.retry_after_seconds);
+      const waitMs = Number.isFinite(after) && after > 0
+        ? Math.min(after * 1000, RATE_LIMIT_MAX_WAIT_MS)
+        : RATE_LIMIT_FALLBACK_MS * (attempt + 1);
+
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      return this.sendWithRetry<T>(method, path, options, attempt + 1);
+    }
   }
 
   private async send<T>(

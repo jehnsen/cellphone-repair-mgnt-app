@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { LogOut, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useTheme } from "next-themes";
+import { BranchSwitcher } from "@/components/shell/branch-switcher";
 import { useShop } from "@/lib/shop/store";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +104,9 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
         </form>
 
         <div className="ml-auto flex items-center gap-1.5">
+          {/* Absent for a cashier: one branch, nothing to switch between. */}
+          <BranchSwitcher />
+
           <button
             type="button"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
