@@ -334,6 +334,19 @@ export interface ShopApi {
   }): Promise<ServiceItem>;
 
   getUsers(): Promise<User[]>;
+  /**
+   * Update the signed-in user's own record via `PATCH /users/{ulid}`. Any of
+   * `name`, `email`, `password` (min 8). The API has no dedicated
+   * change-password route and asks for no current password — it trusts the
+   * bearer token. Returns the refreshed `User`; the store re-persists the
+   * session from it so the header and the "signed in as" row update without a
+   * reload. `email` is the sign-in identity ("username").
+   */
+  updateProfile(input: {
+    name?: string;
+    email?: string;
+    password?: string;
+  }): Promise<User>;
   getShifts(): Promise<Shift[]>;
   getOpenShift(): Promise<Shift | null>;
   openShift(input: { startingCash: number; userId: ID }): Promise<Shift>;

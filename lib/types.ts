@@ -41,6 +41,8 @@ export interface User {
   name: string;
   initials: string;
   role: Role;
+  /** The sign-in identity — what `/auth/token` takes as the "username". */
+  email?: string;
   mobile?: string;
   active: boolean;
   /** Technicians appear on the board and in throughput reports. */

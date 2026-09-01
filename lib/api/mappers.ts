@@ -107,6 +107,7 @@ export function toUser(dto: UserDto): User {
     name: dto.name,
     initials: initialsOf(dto.name),
     role,
+    email: dto.email || undefined,
     mobile: undefined,
     active: dto.is_active ?? true,
     isTechnician: roles.includes("technician"),

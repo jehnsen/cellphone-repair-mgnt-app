@@ -796,6 +796,27 @@ export function createLiveApi(
         throw caught;
       }
     },
+
+    async updateProfile(input) {
+      const self = context.currentUser();
+      if (!self?.id) {
+        throw new ApiError(
+          "No signed-in user to update.",
+          "Sign out and sign in again.",
+          { code: "UNAUTHENTICATED" },
+        );
+      }
+
+      const body: Record<string, unknown> = {};
+      if (input.name !== undefined) body.name = input.name.trim();
+      if (input.email !== undefined) body.email = input.email.trim();
+      /* Only sent when actually changing it — an empty field is not "clear the
+         password", it is "leave it". */
+      if (input.password) body.password = input.password;
+
+      const { data } = await client.patch<UserDto>(`/users/${self.id}`, { body });
+      return toUser(data);
+    },
   };
 }
 

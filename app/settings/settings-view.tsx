@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   Building2,
+  KeyRound,
   MessageSquareText,
   PlugZap,
   Plus,
@@ -12,6 +13,7 @@ import {
   SlidersHorizontal,
   Smartphone,
   Trash2,
+  UserCog,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
@@ -51,6 +53,7 @@ import type {
   MessageEventKey,
   MessageTemplate,
   ShopSetting,
+  User,
 } from "@/lib/types";
 
 /**
@@ -118,6 +121,7 @@ export function SettingsView() {
 
 function ConnectionTab() {
   const { apiBaseUrl, user, db, signOut } = useShop();
+  const [editingProfile, setEditingProfile] = useState(false);
 
   return (
     <>
@@ -143,6 +147,30 @@ function ConnectionTab() {
           </Button>
         </PanelBody>
       </Panel>
+
+      <Panel>
+        <PanelHeader>
+          <UserCog className="size-3.5 text-ink-faint" aria-hidden />
+          <PanelTitle>Your account</PanelTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setEditingProfile(true)}
+          >
+            Edit profile
+          </Button>
+        </PanelHeader>
+        <dl className="divide-y divide-rule-soft">
+          <Row label="Name" value={user.name} />
+          <Row label="Sign-in email" value={user.email || "—"} mono />
+          <Row label="Password" value="••••••••" />
+        </dl>
+      </Panel>
+
+      {editingProfile ? (
+        <ProfileDialog user={user} onClose={() => setEditingProfile(false)} />
+      ) : null}
 
       <Panel>
         <PanelHeader>
@@ -178,6 +206,167 @@ function Row({
         {value}
       </dd>
     </div>
+  );
+}
+
+/* ── Your account ────────────────────────────────────────────────────── */
+
+/**
+ * Edit the signed-in user's own name, sign-in email, and password. The email
+ * is the "username" — what `/auth/token` takes. The password fields stay empty
+ * unless the user is changing it; leaving them blank leaves the password as-is.
+ * The API asks for no current password, so this does not either.
+ */
+function ProfileDialog({ user, onClose }: { user: User; onClose: () => void }) {
+  const { updateProfile } = useShop();
+
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email ?? "");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [pending, setPending] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const changingPassword = password.length > 0 || confirm.length > 0;
+  const nameChanged = name.trim() !== user.name;
+  const emailChanged = email.trim() !== (user.email ?? "");
+  const somethingChanged = nameChanged || emailChanged || changingPassword;
+
+  const passwordMismatch = changingPassword && password !== confirm;
+  const passwordTooShort = changingPassword && password.length < 8;
+
+  const canSave =
+    somethingChanged &&
+    name.trim().length > 0 &&
+    email.trim().length > 0 &&
+    !passwordMismatch &&
+    !passwordTooShort &&
+    !pending;
+
+  const submit = async () => {
+    setFieldErrors({});
+    setPending(true);
+    try {
+      await updateProfile({
+        ...(nameChanged ? { name: name.trim() } : {}),
+        ...(emailChanged ? { email: email.trim() } : {}),
+        ...(changingPassword ? { password } : {}),
+      });
+      toast.success(
+        changingPassword ? "Profile and password updated." : "Profile updated.",
+      );
+      onClose();
+    } catch (error) {
+      if (error instanceof ApiError && Object.keys(error.fieldErrors).length) {
+        setFieldErrors(error.fieldErrors);
+      }
+      const { message, description } = toastError(
+        error,
+        "Could not update your profile.",
+      );
+      toast.error(message, { description });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Your account</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="pf-name">Name</Label>
+            <Input
+              id="pf-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.name) || undefined}
+            />
+            {fieldErrors.name ? (
+              <p className="text-xs text-stamp-ink">{fieldErrors.name}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="pf-email">Sign-in email</Label>
+            <Input
+              id="pf-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.email) || undefined}
+            />
+            {fieldErrors.email ? (
+              <p className="text-xs text-stamp-ink">{fieldErrors.email}</p>
+            ) : (
+              <p className="text-xs text-ink-faint">
+                This is what you type to sign in.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-md border border-rule-soft p-3">
+            <div className="flex items-center gap-2">
+              <KeyRound className="size-3.5 text-ink-faint" aria-hidden />
+              <span className="label-bin text-ink">Change password</span>
+            </div>
+            <p className="mt-1 text-xs text-ink-faint">
+              Leave blank to keep your current password.
+            </p>
+            <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-pass">New password</Label>
+                <Input
+                  id="pf-pass"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={
+                    Boolean(fieldErrors.password) || passwordTooShort || undefined
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-confirm">Confirm</Label>
+                <Input
+                  id="pf-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  aria-invalid={passwordMismatch || undefined}
+                />
+              </div>
+            </div>
+            {passwordTooShort ? (
+              <p className="mt-1.5 text-xs text-stamp-ink">
+                Use at least 8 characters.
+              </p>
+            ) : passwordMismatch ? (
+              <p className="mt-1.5 text-xs text-stamp-ink">
+                The two passwords do not match.
+              </p>
+            ) : fieldErrors.password ? (
+              <p className="mt-1.5 text-xs text-stamp-ink">{fieldErrors.password}</p>
+            ) : null}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {pending ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

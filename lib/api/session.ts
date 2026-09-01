@@ -47,6 +47,17 @@ export function saveSession(session: StoredSession): void {
   write(STORAGE.branch, session.branch);
 }
 
+/**
+ * Merge fields into the stored user without touching the token or branch —
+ * used after the signed-in user edits their own profile, so a reload keeps the
+ * new name/email instead of the copy captured at sign-in.
+ */
+export function patchStoredUser(patch: Partial<UserDto>): void {
+  const current = read<UserDto>(STORAGE.user);
+  if (!current) return;
+  write(STORAGE.user, { ...current, ...patch });
+}
+
 export function clearSession(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(STORAGE.token);

@@ -65,6 +65,9 @@ export function createUnavailableApi(): ShopApi {
     async getUsers() {
       return [];
     },
+    async updateProfile() {
+      throw missing("Updating your profile", "PATCH /users/{ulid}");
+    },
     async createTicket() {
       throw missing("Creating a job order", "POST /tickets");
     },

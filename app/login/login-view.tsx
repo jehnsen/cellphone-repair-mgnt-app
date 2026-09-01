@@ -31,8 +31,8 @@ export function LoginView() {
   const router = useRouter();
   const { db, signIn, authError, apiBaseUrl } = useShop();
 
-  const [email, setEmail] = useState("ricardo.santos@fixmo.test");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   /* Rendered after mount so the greeting never mismatches the server HTML. */
@@ -192,7 +192,7 @@ export function LoginView() {
                 autoFocus
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@shop.test"
+                placeholder="Your email"
               />
             </div>
 

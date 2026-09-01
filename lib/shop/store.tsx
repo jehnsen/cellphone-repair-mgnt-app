@@ -21,6 +21,7 @@ import { toUser } from "@/lib/api/mappers";
 import {
   clearSession,
   loadSession,
+  patchStoredUser,
   saveSession,
 } from "@/lib/api/session";
 import { EMPTY_DB, shopReducer, type ShopAction } from "@/lib/shop/reducer";
@@ -58,6 +59,17 @@ interface ShopContextValue {
   signIn: (credentials: { email: string; password: string }) => Promise<boolean>;
   signOut: () => void;
   retry: () => void;
+  /**
+   * Edit the signed-in user's own name / email / password. Updates the
+   * in-memory identity and re-persists the session on success, so the header
+   * and Settings reflect it without a reload. Throws on failure — callers show
+   * the error.
+   */
+  updateProfile: (input: {
+    name?: string;
+    email?: string;
+    password?: string;
+  }) => Promise<User>;
 
   user: User;
   role: Role;
@@ -234,6 +246,22 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setAttempt((value) => value + 1);
   }, []);
 
+  const updateProfile = useCallback(
+    async (input: { name?: string; email?: string; password?: string }) => {
+      const updated = await api.updateProfile(input);
+      setSessionUser(updated);
+      /* Keep the persisted copy in step so a reload does not revert the name
+         or email to what was captured at sign-in. The password is never
+         stored client-side. */
+      patchStoredUser({
+        name: updated.name,
+        email: updated.email ?? undefined,
+      });
+      return updated;
+    },
+    [api],
+  );
+
   const user = sessionUser ?? PENDING_USER;
 
   const value = useMemo<ShopContextValue>(
@@ -250,11 +278,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signOut,
       retry,
+      updateProfile,
       user,
       role: user.role,
       can: (permission: Permission) => can(user.role, permission),
     }),
-    [db, api, reports, version, ready, auth, authError, warnings, signIn, signOut, retry, user],
+    [db, api, reports, version, ready, auth, authError, warnings, signIn, signOut, retry, updateProfile, user],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
