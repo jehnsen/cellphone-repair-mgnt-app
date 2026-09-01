@@ -2,17 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDownUp,
   BadgePercent,
   Banknote,
   CheckCircle2,
   Lock,
+  LogOut,
   Minus,
   Plus,
   Printer,
   Repeat,
   ScanBarcode,
+  Search,
   Trash2,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
@@ -21,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input, InputMono } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/ui/states";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMutation, useQuery, useShop } from "@/lib/shop/store";
@@ -29,10 +34,17 @@ import { PrintDocument } from "@/components/print/print-document";
 import { SaleReceipt } from "@/components/print/sale-receipt";
 import { itemStock } from "@/lib/shop/queries";
 import { computeTax } from "@/lib/vat";
-import { money, peso } from "@/lib/format";
+import { formatDateTime, money, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { NewSaleInput } from "@/lib/shop/contract";
-import type { InventoryItem, PaymentMethod, Sale, SaleLineKind } from "@/lib/types";
+import type {
+  InventoryItem,
+  PaymentMethod,
+  Sale,
+  SaleLineKind,
+  ServiceItem,
+  Shift,
+} from "@/lib/types";
 
 interface CartLine {
   key: string;
@@ -79,6 +91,9 @@ export function PosView() {
   const [completed, setCompleted] = useState<Sale | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [startingCash, setStartingCash] = useState("3000");
+  const [servicePicker, setServicePicker] = useState(false);
+  const [closingShift, setClosingShift] = useState(false);
+  const [cashMoving, setCashMoving] = useState(false);
 
   const { data: openShift, refetch: refetchShift } = useQuery((api) => api.getOpenShift());
   const { data: items } = useQuery((api) => api.getItems({}));
@@ -183,13 +198,12 @@ export function PosView() {
     scanRef.current?.focus();
   };
 
-  const addService = () => {
-    const service = db.services.find((s) => s.active);
-    if (!service) return;
+  const addService = (service: ServiceItem) => {
     setCart((prev) => [
       ...prev,
       {
-        key: `svc-${Date.now()}`,
+        /* Unique per add, so the same service can be rung twice. */
+        key: `svc-${service.id}-${Date.now()}`,
         kind: "service",
         /* The service's own ULID: this is the only kind of line the server
            accepts as `service_ulid`, and without it the sale cannot be sent. */
@@ -203,6 +217,11 @@ export function PosView() {
       },
     ]);
   };
+
+  const activeServices = useMemo(
+    () => db.services.filter((service) => service.active),
+    [db.services],
+  );
 
   const setQuantity = (key: string, delta: number) => {
     setCart((prev) =>
@@ -393,7 +412,17 @@ export function PosView() {
         title="Point of sale"
         description="Scan or search, Enter adds to the cart. Handsets go by IMEI, everything else by quantity."
         actions={
-          <span className="mono text-xs text-ink-faint">Shift {openShift.shiftNo}</span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="mono text-xs text-ink-faint">
+              {openShift.shiftNo} · {peso(openShift.expectedCash ?? openShift.startingCash)} drawer
+            </span>
+            <Button variant="outline" size="xs" onClick={() => setCashMoving(true)}>
+              <ArrowDownUp aria-hidden /> Cash in / out
+            </Button>
+            <Button variant="outline" size="xs" onClick={() => setClosingShift(true)}>
+              <LogOut aria-hidden /> Close shift
+            </Button>
+          </div>
         }
       />
 
@@ -456,8 +485,12 @@ export function PosView() {
             <PanelHeader>
               <PanelTitle>Cart</PanelTitle>
               <div className="ml-auto flex items-center gap-1.5">
-                <Button variant="outline" size="xs" onClick={addService}>
-                  <Plus aria-hidden /> Service
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setServicePicker(true)}
+                >
+                  <Wrench aria-hidden /> Service
                 </Button>
                 {cart.length > 0 ? (
                   <Button variant="ghost" size="xs" onClick={clearCart}>
@@ -825,6 +858,32 @@ export function PosView() {
           />
         </PrintDocument>
       ) : null}
+
+      {servicePicker ? (
+        <ServicePickerDialog
+          services={activeServices}
+          onPick={addService}
+          onClose={() => setServicePicker(false)}
+        />
+      ) : null}
+
+      {closingShift ? (
+        <CloseShiftDialog
+          shift={openShift}
+          cashierId={user.id}
+          onClose={() => setClosingShift(false)}
+          onClosed={refetchShift}
+        />
+      ) : null}
+
+      {cashMoving ? (
+        <CashMovementDialog
+          shift={openShift}
+          cashierId={user.id}
+          onClose={() => setCashMoving(false)}
+          onDone={refetchShift}
+        />
+      ) : null}
     </div>
   );
 }
@@ -833,24 +892,508 @@ function Row({
   label,
   value,
   muted,
+  strong,
   tone,
 }: {
   label: string;
   value: string;
   muted?: boolean;
+  strong?: boolean;
   tone?: "bench";
 }) {
   return (
     <div className="flex items-baseline justify-between">
-      <span className={cn(muted ? "text-ink-faint" : "text-ink-soft")}>{label}</span>
+      <span
+        className={cn(
+          muted ? "text-ink-faint" : "text-ink-soft",
+          strong && "font-medium text-ink",
+        )}
+      >
+        {label}
+      </span>
       <span
         className={cn(
           "mono",
+          strong && "font-semibold",
           tone === "bench" ? "text-bench-ink" : muted ? "text-ink-faint" : "text-ink",
         )}
       >
         {value}
       </span>
     </div>
+  );
+}
+
+/* ── Service picker ──────────────────────────────────────────────────────
+   The catalog's services, searchable — plus a custom one-off. Replaces the
+   old "grab the first active service" shortcut, which quietly rang up the
+   wrong labour. A custom line is created as a real service because the
+   server prices a service line from the record, never a per-line override. */
+function ServicePickerDialog({
+  services,
+  onPick,
+  onClose,
+}: {
+  services: ServiceItem[];
+  onPick: (service: ServiceItem) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<"pick" | "custom">("pick");
+  const [q, setQ] = useState("");
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [price, setPrice] = useState("");
+
+  const createCustom = useMutation(
+    (api, input: { name: string; price: number; category?: string }) =>
+      api.createService(input),
+  );
+
+  const rows = useMemo(() => {
+    const sorted = [...services].sort((a, b) => a.name.localeCompare(b.name));
+    const needle = q.trim().toLowerCase();
+    if (!needle) return sorted;
+    return sorted.filter((service) =>
+      `${service.name} ${service.code} ${service.category}`.toLowerCase().includes(needle),
+    );
+  }, [services, q]);
+
+  const priceNum = Number.parseFloat(price || "0");
+  const canCreate =
+    name.trim().length > 0 &&
+    Number.isFinite(priceNum) &&
+    priceNum > 0 &&
+    !createCustom.pending;
+
+  const submitCustom = async () => {
+    if (!canCreate) return;
+    const { data, error } = await createCustom.mutate({
+      name: name.trim(),
+      price: money(priceNum),
+      category: category.trim() || undefined,
+    });
+    if (data) {
+      onPick(data);
+      toast.success(`${data.name} added.`);
+      onClose();
+    } else if (error) {
+      const { message, description } = toastError(
+        error,
+        "Could not add the custom service.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wrench className="size-4 text-ink-faint" aria-hidden />
+            {mode === "custom" ? "Custom service" : "Add a service"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {mode === "custom" ? (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="cs-name" className="label-pad">
+                Name
+              </Label>
+              <Input
+                id="cs-name"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Back camera lens swap"
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px]">
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-category" className="label-pad">
+                  Category (optional)
+                </Label>
+                <Input
+                  id="cs-category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="custom"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-price" className="label-pad">
+                  Price
+                </Label>
+                <InputMono
+                  id="cs-price"
+                  inputMode="decimal"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-ink-faint">
+              Added to the service catalog so the sale and the reports have a
+              real line to point at. It stays available in this list afterwards.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="ghost"
+                onClick={() => setMode("pick")}
+                disabled={createCustom.pending}
+              >
+                Back
+              </Button>
+              <Button onClick={submitCustom} disabled={!canCreate}>
+                {createCustom.pending
+                  ? "Adding…"
+                  : `Add ${priceNum > 0 ? peso(money(priceNum)) : "service"}`}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint"
+                aria-hidden
+              />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search by name, code, or category"
+                className="pl-8"
+                autoFocus
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMode("custom")}
+              className="tap flex w-full items-center gap-2 rounded-lg border border-dashed border-rule px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-secondary"
+            >
+              <Plus className="size-3.5 shrink-0" aria-hidden />
+              Custom service — name it and set the price
+            </button>
+
+            {rows.length === 0 ? (
+              <EmptyState
+                icon={Wrench}
+                title="No service matches."
+                body="Try the service code, a different word, or add a custom one above."
+              />
+            ) : (
+              <ul className="max-h-[45vh] divide-y divide-rule-soft overflow-y-auto rounded-lg border border-rule">
+                {rows.map((service) => (
+                  <li key={service.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onPick(service);
+                        onClose();
+                      }}
+                      className="tap flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-secondary"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-ink">{service.name}</p>
+                        <p className="mono text-xs text-ink-faint">
+                          {service.code} · {service.category}
+                        </p>
+                      </div>
+                      <span className="mono text-sm font-semibold text-ink">
+                        {peso(service.standardPrice)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Drawer: close and cash in/out ──────────────────────────────────────
+   `closeShift` and `addCashMovement` existed on the contract but had no UI,
+   so a shift opened at the counter could never be reconciled from here. */
+function CloseShiftDialog({
+  shift,
+  cashierId,
+  onClose,
+  onClosed,
+}: {
+  shift: Shift;
+  cashierId: string;
+  onClose: () => void;
+  onClosed: () => void;
+}) {
+  const close = useMutation((api, input: { countedCash: number; note?: string }) =>
+    api.closeShift({
+      shiftId: shift.id,
+      countedCash: input.countedCash,
+      userId: cashierId,
+      note: input.note,
+    }),
+  );
+
+  const [counted, setCounted] = useState("");
+  const [note, setNote] = useState("");
+
+  const cashIn = shift.movements
+    .filter((m) => m.kind === "cash_in")
+    .reduce((sum, m) => sum + m.amount, 0);
+  const cashOut = shift.movements
+    .filter((m) => m.kind === "cash_out")
+    .reduce((sum, m) => sum + m.amount, 0);
+  /* The server's own figure when it gives one; otherwise reconstruct it. */
+  const expected =
+    shift.expectedCash ?? money(shift.startingCash + cashIn - cashOut);
+
+  const countedNum = Number.parseFloat(counted || "0");
+  const hasCount = counted.trim() !== "" && Number.isFinite(countedNum);
+  const variance = hasCount ? money(countedNum - expected) : 0;
+
+  const submit = async () => {
+    if (!hasCount) return;
+    const { data, error } = await close.mutate({
+      countedCash: money(countedNum),
+      note: note.trim() || undefined,
+    });
+    if (data) {
+      toast.success(`Shift ${data.shiftNo} closed.`, {
+        description:
+          variance === 0
+            ? "Drawer balanced."
+            : variance > 0
+              ? `Over by ${peso(variance)}.`
+              : `Short by ${peso(Math.abs(variance))}.`,
+      });
+      onClosed();
+      onClose();
+    } else if (error) {
+      const { message, description } = toastError(error, "Could not close the shift.");
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <LogOut className="size-4 text-ink-faint" aria-hidden />
+            Close shift {shift.shiftNo}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <dl className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm">
+            <Row label="Opened" value={formatDateTime(shift.openedAt)} />
+            <Row label="Starting cash" value={peso(shift.startingCash)} />
+            {cashIn > 0 ? (
+              <Row label="Paid in" value={`+ ${peso(cashIn)}`} tone="bench" />
+            ) : null}
+            {cashOut > 0 ? <Row label="Paid out" value={`− ${peso(cashOut)}`} /> : null}
+            <Row label="Expected in drawer" value={peso(expected)} strong />
+          </dl>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="close-counted" className="label-pad">
+              Counted cash
+            </Label>
+            <InputMono
+              id="close-counted"
+              inputMode="decimal"
+              autoFocus
+              value={counted}
+              onChange={(e) => setCounted(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="0.00"
+            />
+          </div>
+
+          {hasCount ? (
+            <div
+              className={cn(
+                "flex items-baseline justify-between rounded-md px-2.5 py-2 text-sm font-semibold",
+                variance === 0
+                  ? "bg-bench-fill text-bench-ink"
+                  : variance > 0
+                    ? "bg-flag-fill text-flag-ink"
+                    : "bg-stamp-fill text-stamp-ink",
+              )}
+            >
+              <span>{variance === 0 ? "Balances" : variance > 0 ? "Over" : "Short"}</span>
+              <span className="mono">{peso(Math.abs(variance))}</span>
+            </div>
+          ) : null}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="close-note" className="label-pad">
+              Note (optional)
+            </Label>
+            <Textarea
+              id="close-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="Anything that explains a variance."
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={close.pending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submit}
+              disabled={!hasCount || close.pending}
+            >
+              {close.pending ? "Closing…" : "Close shift"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CashMovementDialog({
+  shift,
+  cashierId,
+  onClose,
+  onDone,
+}: {
+  shift: Shift;
+  cashierId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const move = useMutation(
+    (api, input: { kind: "cash_in" | "cash_out"; amount: number; reason: string }) =>
+      api.addCashMovement({
+        shiftId: shift.id,
+        kind: input.kind,
+        amount: input.amount,
+        reason: input.reason,
+        userId: cashierId,
+      }),
+  );
+
+  const [kind, setKind] = useState<"cash_in" | "cash_out">("cash_out");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  const value = Number.parseFloat(amount || "0");
+  const valid =
+    Number.isFinite(value) && value > 0 && reason.trim().length > 0 && !move.pending;
+
+  const submit = async () => {
+    if (!valid) return;
+    const { data, error } = await move.mutate({
+      kind,
+      amount: money(value),
+      reason: reason.trim(),
+    });
+    if (data) {
+      toast.success(
+        kind === "cash_in"
+          ? `Paid in ${peso(money(value))}.`
+          : `Paid out ${peso(money(value))}.`,
+      );
+      onDone();
+      onClose();
+    } else if (error) {
+      const { message, description } = toastError(
+        error,
+        "Could not record the cash movement.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowDownUp className="size-4 text-ink-faint" aria-hidden />
+            Cash in / out — {shift.shiftNo}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { value: "cash_in", label: "Paid in" },
+                { value: "cash_out", label: "Paid out" },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setKind(option.value)}
+                aria-pressed={kind === option.value}
+                className={cn(
+                  "tap rounded-md border px-2.5 py-2 text-sm font-medium transition-colors",
+                  kind === option.value
+                    ? "border-bench bg-bench-fill text-bench-ink"
+                    : "border-rule bg-paper text-ink-soft hover:bg-secondary",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cash-amount" className="label-pad">
+              Amount
+            </Label>
+            <InputMono
+              id="cash-amount"
+              inputMode="decimal"
+              autoFocus
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="0.00"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cash-reason" className="label-pad">
+              Reason
+            </Label>
+            <Input
+              id="cash-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={
+                kind === "cash_in" ? "Float top-up, owner deposit…" : "Supplier COD, petty cash…"
+              }
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={move.pending}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!valid}>
+              {move.pending
+                ? "Recording…"
+                : `Record ${value > 0 ? peso(money(value)) : ""}`.trim()}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

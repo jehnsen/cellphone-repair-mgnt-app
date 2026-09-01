@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { BookOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV, type NavItem } from "@/components/shell/nav";
 import { useShop } from "@/lib/shop/store";
@@ -104,6 +104,14 @@ export function NavRail({
         })}
       </div>
 
+      <div className={cn("border-t border-rule/70 px-3 pt-2", collapsed && "px-2")}>
+        <HelpLink
+          active={pathname.startsWith("/help")}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+      </div>
+
       {onToggleCollapsed ? (
         <div className={cn("hidden px-3 lg:block", collapsed && "px-2")}>
           <button
@@ -127,6 +135,52 @@ export function NavRail({
         </div>
       ) : null}
     </nav>
+  );
+}
+
+/**
+ * The guide, pinned under the menu rather than filed inside a section — it is
+ * about the app, not the shop, so it does not belong under Counter / Shop /
+ * Office. Styled like the Collapse control below it, not like a nav item.
+ */
+function HelpLink({
+  active,
+  collapsed,
+  onNavigate,
+}: {
+  active: boolean;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  const link = (
+    <Link
+      href="/help"
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-sm border px-2 py-1.5 text-xs transition-colors",
+        collapsed && "justify-center px-0",
+        active
+          ? "border-rule bg-copy font-medium text-ink"
+          : "border-transparent text-ink-soft hover:border-rule hover:bg-copy hover:text-ink",
+      )}
+    >
+      <BookOpen className="size-4 shrink-0" aria-hidden />
+      {collapsed ? (
+        <span className="sr-only">Help &amp; guide</span>
+      ) : (
+        <span>Help &amp; guide</span>
+      )}
+    </Link>
+  );
+
+  if (!collapsed) return link;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right">Help &amp; guide</TooltipContent>
+    </Tooltip>
   );
 }
 

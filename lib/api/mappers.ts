@@ -6,6 +6,7 @@ import type {
   CustomerDto,
   StoreCreditDto,
   StoreCreditEntryDto,
+  DeviceBrandDto,
   DeviceModelDto,
   MessageTemplateDto,
   ProductDto,
@@ -24,6 +25,8 @@ import type {
   BranchProfile,
   ConditionCheck,
   Customer,
+  DeviceBrand,
+  DeviceModel,
   DeviceType,
   InventoryItem,
   MessageEventKey,
@@ -162,6 +165,21 @@ export function toStoreCredit(customerId: string, dto: StoreCreditDto): StoreCre
 }
 
 /* ── Devices ─────────────────────────────────────────────────────────── */
+
+export function toDeviceBrand(dto: DeviceBrandDto): DeviceBrand {
+  return { id: dto.ulid, name: dto.name, active: dto.is_active ?? true };
+}
+
+export function toDeviceModel(dto: DeviceModelDto): DeviceModel {
+  return {
+    id: dto.ulid,
+    name: dto.name,
+    brandId: dto.brand?.ulid ?? "",
+    brandName: dto.brand?.name ?? "",
+    releaseYear: dto.release_year ?? undefined,
+    active: dto.is_active ?? true,
+  };
+}
 
 /** The API has no device type; the model name is the only signal there is. */
 export function deviceTypeFor(model: string | null | undefined): DeviceType {

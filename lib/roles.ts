@@ -111,4 +111,5 @@ export const NAV_PERMISSION: Record<string, Permission | null> = {
   "/customers": null,
   "/reports": "reports.view",
   "/settings": "settings.manage",
+  "/help": null,
 };

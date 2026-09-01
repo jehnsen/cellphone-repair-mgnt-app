@@ -1,1 +1,0 @@
-- after adding new customer, it doesn't reflect immediately, needs to refresh browser before it appears in the customer list  

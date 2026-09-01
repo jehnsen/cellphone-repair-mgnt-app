@@ -5,14 +5,16 @@ import {
   Building2,
   MessageSquareText,
   PlugZap,
+  Plus,
   RefreshCw,
   RotateCcw,
   Settings2,
   SlidersHorizontal,
+  Smartphone,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
-import { DataSourceNotice } from "@/components/shell/data-source-notice";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +45,8 @@ import { cn } from "@/lib/utils";
 import type { BranchPatch, SettingPatch } from "@/lib/shop/contract";
 import type {
   BranchProfile,
+  DeviceBrand,
+  DeviceModel,
   MessageChannel,
   MessageEventKey,
   MessageTemplate,
@@ -82,6 +86,9 @@ export function SettingsView() {
           <TabsTrigger value="config">
             <SlidersHorizontal aria-hidden /> Configuration
           </TabsTrigger>
+          <TabsTrigger value="devices">
+            <Smartphone aria-hidden /> Devices
+          </TabsTrigger>
           <TabsTrigger value="templates">
             <MessageSquareText aria-hidden /> Message templates
           </TabsTrigger>
@@ -95,6 +102,9 @@ export function SettingsView() {
         </TabsContent>
         <TabsContent value="config" className="pt-4">
           <ConfigTab />
+        </TabsContent>
+        <TabsContent value="devices" className="pt-4">
+          <DevicesTab />
         </TabsContent>
         <TabsContent value="templates" className="pt-4">
           <TemplatesTab />
@@ -111,8 +121,6 @@ function ConnectionTab() {
 
   return (
     <>
-      <DataSourceNotice />
-
       <Panel>
         <PanelHeader>
           <PlugZap className="size-3.5 text-ink-faint" aria-hidden />
@@ -1058,6 +1066,517 @@ function TemplateDialog({
             </Button>
             <Button onClick={submit} disabled={!canSave}>
               {pending ? "Saving…" : isEdit ? "Save changes" : "Create template"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Devices ─────────────────────────────────────────────────────────── */
+
+/**
+ * Brands and models the intake picker offers.
+ *
+ * Intake still accepts a device the shop has never seen — it creates the
+ * brand and model on save — so this tab is for tidying and pre-seeding, not a
+ * gate. Deleting is real; switching a row off keeps it on old tickets while
+ * dropping it from the picker, which is the safer move when the server refuses
+ * a delete because something still points at it.
+ */
+function DevicesTab() {
+  const brandsQuery = useQuery((api) => api.getDeviceBrands(), []);
+  const modelsQuery = useQuery((api) => api.getDeviceModels(), []);
+
+  const [brandDialog, setBrandDialog] = useState<
+    { mode: "new" } | { mode: "edit"; brand: DeviceBrand } | null
+  >(null);
+  const [modelDialog, setModelDialog] = useState<
+    { mode: "new" } | { mode: "edit"; model: DeviceModel } | null
+  >(null);
+  const [removing, setRemoving] = useState<
+    { kind: "brand"; row: DeviceBrand } | { kind: "model"; row: DeviceModel } | null
+  >(null);
+
+  const remove = useMutation(
+    (
+      api,
+      target:
+        | { kind: "brand"; row: DeviceBrand }
+        | { kind: "model"; row: DeviceModel },
+    ) =>
+      target.kind === "brand"
+        ? api.deleteDeviceBrand(target.row.id)
+        : api.deleteDeviceModel(target.row.id),
+  );
+
+  const brands = brandsQuery.data ?? [];
+  const models = modelsQuery.data ?? [];
+
+  const refetch = () => {
+    brandsQuery.refetch();
+    modelsQuery.refetch();
+  };
+
+  /* Models under each brand that actually has one; brands with none are still
+     managed in the Brands panel above. */
+  const modelGroups = useMemo(() => {
+    const map = new Map<string, DeviceModel[]>();
+    for (const model of [...models].sort((a, b) => a.name.localeCompare(b.name))) {
+      const key = model.brandName || "Unassigned";
+      (map.get(key) ?? map.set(key, []).get(key)!).push(model);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [models]);
+
+  if (brandsQuery.loading || modelsQuery.loading) {
+    return (
+      <Panel>
+        <LoadingRows rows={8} />
+      </Panel>
+    );
+  }
+  if (brandsQuery.error) {
+    return permissionOr(brandsQuery.error, "manage device brands", refetch);
+  }
+  if (modelsQuery.error) {
+    return permissionOr(modelsQuery.error, "manage device models", refetch);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
+          The brands and models intake offers as a tap. A device that is not on
+          the list can still be typed in — it is created on save — so this is for
+          tidying and pre-seeding the units you see most. An inactive row stays
+          on past tickets but drops out of the picker.
+        </p>
+        <Button size="sm" variant="outline" onClick={() => setBrandDialog({ mode: "new" })}>
+          <Plus aria-hidden /> New brand
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setModelDialog({ mode: "new" })}
+          disabled={brands.length === 0}
+        >
+          <Plus aria-hidden /> New model
+        </Button>
+      </div>
+
+      <Panel>
+        <PanelHeader>
+          <Smartphone className="size-3.5 text-ink-faint" aria-hidden />
+          <PanelTitle>Brands</PanelTitle>
+          <span className="mono ml-auto text-xs text-ink-faint">
+            {brands.length} brand{brands.length === 1 ? "" : "s"}
+          </span>
+        </PanelHeader>
+
+        {brands.length === 0 ? (
+          <EmptyState
+            icon={Smartphone}
+            title="No brands yet."
+            body="Add the brands you see most — Apple, Samsung, Xiaomi, realme — so intake is a tap, not a type."
+          />
+        ) : (
+          <ul className="divide-y divide-rule-soft">
+            {brands.map((brand) => {
+              const count = models.filter((m) => m.brandId === brand.id).length;
+              return (
+                <li
+                  key={brand.id}
+                  className="flex items-center gap-3 px-3 py-2 sm:px-4"
+                >
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-sm",
+                      brand.active ? "text-ink" : "text-ink-faint line-through",
+                    )}
+                  >
+                    {brand.name}
+                  </span>
+                  {!brand.active ? <Badge variant="ghost">off</Badge> : null}
+                  <span className="mono text-xs text-ink-faint">
+                    {count} model{count === 1 ? "" : "s"}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setBrandDialog({ mode: "edit", brand })}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Delete ${brand.name}`}
+                    onClick={() => setRemoving({ kind: "brand", row: brand })}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      {models.length === 0 ? (
+        <Panel>
+          <PanelHeader>
+            <PanelTitle>Models</PanelTitle>
+          </PanelHeader>
+          <EmptyState
+            icon={Smartphone}
+            title="No models yet."
+            body={
+              brands.length === 0
+                ? "Add a brand first, then its models."
+                : "Add the models you handle often under each brand."
+            }
+          />
+        </Panel>
+      ) : (
+        modelGroups.map(([brandName, rows]) => (
+          <Panel key={brandName}>
+            <PanelHeader>
+              <PanelTitle>{brandName}</PanelTitle>
+              <span className="mono ml-auto text-xs text-ink-faint">
+                {rows.length} model{rows.length === 1 ? "" : "s"}
+              </span>
+            </PanelHeader>
+            <ul className="divide-y divide-rule-soft">
+              {rows.map((model) => (
+                <li
+                  key={model.id}
+                  className="flex items-center gap-3 px-3 py-2 sm:px-4"
+                >
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-sm",
+                      model.active ? "text-ink" : "text-ink-faint line-through",
+                    )}
+                  >
+                    {model.name}
+                  </span>
+                  {model.releaseYear ? (
+                    <span className="mono text-xs text-ink-faint">
+                      {model.releaseYear}
+                    </span>
+                  ) : null}
+                  {!model.active ? <Badge variant="ghost">off</Badge> : null}
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setModelDialog({ mode: "edit", model })}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Delete ${model.name}`}
+                    onClick={() => setRemoving({ kind: "model", row: model })}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        ))
+      )}
+
+      {brandDialog ? (
+        <BrandDialog
+          brand={brandDialog.mode === "edit" ? brandDialog.brand : undefined}
+          onClose={() => setBrandDialog(null)}
+          onSaved={() => {
+            setBrandDialog(null);
+            refetch();
+          }}
+        />
+      ) : null}
+
+      {modelDialog ? (
+        <ModelDialog
+          model={modelDialog.mode === "edit" ? modelDialog.model : undefined}
+          brands={brands}
+          onClose={() => setModelDialog(null)}
+          onSaved={() => {
+            setModelDialog(null);
+            refetch();
+          }}
+        />
+      ) : null}
+
+      {removing ? (
+        <Dialog open onOpenChange={(open) => !open && setRemoving(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>
+                Delete {removing.kind === "brand" ? "brand" : "model"}?
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm leading-relaxed text-ink-soft">
+              {removing.kind === "brand"
+                ? `“${removing.row.name}” leaves the intake picker. Past tickets keep the name they were saved with. If models still point at it the server will refuse — switch it off instead.`
+                : `“${removing.row.name}” leaves the intake picker. Past tickets are unaffected.`}
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setRemoving(null)}
+                disabled={remove.pending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={remove.pending}
+                onClick={async () => {
+                  const { error } = await remove.mutate(removing);
+                  if (error) {
+                    const { message, description } = toastError(
+                      error,
+                      "Could not delete it.",
+                    );
+                    toast.error(message, { description });
+                  } else {
+                    toast.success(`${removing.row.name} deleted.`);
+                    setRemoving(null);
+                    refetch();
+                  }
+                }}
+              >
+                {remove.pending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}
+
+function BrandDialog({
+  brand,
+  onClose,
+  onSaved,
+}: {
+  brand?: DeviceBrand;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = Boolean(brand);
+  const create = useMutation((api, name: string) => api.createDeviceBrand({ name }));
+  const update = useMutation(
+    (api, input: { id: string; name: string; active: boolean }) =>
+      api.updateDeviceBrand(input),
+  );
+  const pending = create.pending || update.pending;
+
+  const [name, setName] = useState(brand?.name ?? "");
+  const [active, setActive] = useState(brand?.active ?? true);
+
+  const canSave = name.trim().length > 0 && !pending;
+
+  const submit = async () => {
+    if (!canSave) return;
+    const outcome = isEdit
+      ? await update.mutate({ id: brand!.id, name: name.trim(), active })
+      : await create.mutate(name.trim());
+
+    if (outcome.data) {
+      toast.success(isEdit ? "Brand updated." : `${outcome.data.name} added.`);
+      onSaved();
+    } else if (outcome.error) {
+      const { message, description } = toastError(
+        outcome.error,
+        "Could not save the brand.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? `Edit ${brand!.name}` : "New brand"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="brand-name">Name</Label>
+            <Input
+              id="brand-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Apple"
+            />
+          </div>
+
+          {isEdit ? (
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <Switch checked={active} onCheckedChange={setActive} />
+              {active ? "Active — shown in the intake picker" : "Inactive — hidden from the picker"}
+            </label>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {pending ? "Saving…" : isEdit ? "Save changes" : "Add brand"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModelDialog({
+  model,
+  brands,
+  onClose,
+  onSaved,
+}: {
+  model?: DeviceModel;
+  brands: DeviceBrand[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = Boolean(model);
+  const create = useMutation(
+    (api, input: { brandId: string; name: string; releaseYear?: number }) =>
+      api.createDeviceModel(input),
+  );
+  const update = useMutation(
+    (
+      api,
+      input: {
+        id: string;
+        name: string;
+        brandId: string;
+        releaseYear: number | null;
+        active: boolean;
+      },
+    ) => api.updateDeviceModel(input),
+  );
+  const pending = create.pending || update.pending;
+
+  /* Fall back to the first active brand for a new model. */
+  const [brandId, setBrandId] = useState(
+    model?.brandId ?? brands.find((b) => b.active)?.id ?? brands[0]?.id ?? "",
+  );
+  const [name, setName] = useState(model?.name ?? "");
+  const [year, setYear] = useState(model?.releaseYear ? String(model.releaseYear) : "");
+  const [active, setActive] = useState(model?.active ?? true);
+
+  const yearNum = year.trim() === "" ? null : Number(year.trim());
+  const yearValid =
+    yearNum === null || (Number.isInteger(yearNum) && yearNum >= 1990 && yearNum <= 2100);
+  const canSave = name.trim().length > 0 && brandId !== "" && yearValid && !pending;
+
+  const submit = async () => {
+    if (!canSave) return;
+    const outcome = isEdit
+      ? await update.mutate({
+          id: model!.id,
+          name: name.trim(),
+          brandId,
+          releaseYear: yearNum,
+          active,
+        })
+      : await create.mutate({
+          brandId,
+          name: name.trim(),
+          releaseYear: yearNum ?? undefined,
+        });
+
+    if (outcome.data) {
+      toast.success(isEdit ? "Model updated." : `${outcome.data.name} added.`);
+      onSaved();
+    } else if (outcome.error) {
+      const { message, description } = toastError(
+        outcome.error,
+        "Could not save the model.",
+      );
+      toast.error(message, { description });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? `Edit ${model!.name}` : "New model"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Brand</Label>
+            <Select value={brandId} onValueChange={setBrandId}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Pick a brand" />
+              </SelectTrigger>
+              <SelectContent>
+                {brands.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                    {!b.active ? " (inactive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
+            <div className="space-y-1.5">
+              <Label htmlFor="model-name">Model</Label>
+              <Input
+                id="model-name"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="iPhone 13 Pro"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="model-year">Year</Label>
+              <Input
+                id="model-year"
+                inputMode="numeric"
+                value={year}
+                onChange={(e) => setYear(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="2021"
+                aria-invalid={!yearValid || undefined}
+              />
+            </div>
+          </div>
+          {!yearValid ? (
+            <p className="text-xs text-stamp-ink">Release year looks off.</p>
+          ) : null}
+
+          {isEdit ? (
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <Switch checked={active} onCheckedChange={setActive} />
+              {active ? "Active — shown in the intake picker" : "Inactive — hidden from the picker"}
+            </label>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={!canSave}>
+              {pending ? "Saving…" : isEdit ? "Save changes" : "Add model"}
             </Button>
           </div>
         </div>

@@ -3,7 +3,9 @@ import type {
   ConditionCheck,
   Customer,
   DefectArea,
+  DeviceBrand,
   DeviceInfo,
+  DeviceModel,
   Discount,
   HandsetCondition,
   HandsetUnitStatus,
@@ -22,6 +24,7 @@ import type {
   RootCause,
   Sale,
   SaleLineKind,
+  ServiceItem,
   SettingType,
   Shift,
   ShopSetting,
@@ -318,6 +321,18 @@ export interface ShopApi {
   getSale(id: ID): Promise<Sale>;
   createSale(input: NewSaleInput): Promise<Sale>;
 
+  /**
+   * Ad-hoc labour for the counter. The server prices a service line from the
+   * service record — there is no per-line price override — so a one-off charge
+   * has to exist as a catalog row. It persists and stays in the picker after.
+   * `pos.sell` is enough.
+   */
+  createService(input: {
+    name: string;
+    price: number;
+    category?: string;
+  }): Promise<ServiceItem>;
+
   getUsers(): Promise<User[]>;
   getShifts(): Promise<Shift[]>;
   getOpenShift(): Promise<Shift | null>;
@@ -382,6 +397,37 @@ export interface ShopApi {
 
   /** Brand and model lists for the intake pickers, from the API catalog. */
   getDeviceCatalog(): Promise<DeviceCatalog>;
+
+  /* ── Device reference data ──────────────────────────────────────────
+     The brand/model rows behind the intake pickers, managed under
+     Settings → Devices. `getDeviceCatalog` above is the read-optimised,
+     active-only view; these return the whole set, inactive included, and
+     need `settings.manage` server-side. */
+  getDeviceBrands(): Promise<DeviceBrand[]>;
+  createDeviceBrand(input: { name: string }): Promise<DeviceBrand>;
+  updateDeviceBrand(input: {
+    id: ID;
+    name?: string;
+    active?: boolean;
+  }): Promise<DeviceBrand>;
+  /** The server refuses (`409`/`422`) while a model or ticket still
+   *  points at it; deactivate instead when that happens. */
+  deleteDeviceBrand(id: ID): Promise<void>;
+
+  getDeviceModels(): Promise<DeviceModel[]>;
+  createDeviceModel(input: {
+    brandId: ID;
+    name: string;
+    releaseYear?: number;
+  }): Promise<DeviceModel>;
+  updateDeviceModel(input: {
+    id: ID;
+    name?: string;
+    brandId?: ID;
+    releaseYear?: number | null;
+    active?: boolean;
+  }): Promise<DeviceModel>;
+  deleteDeviceModel(id: ID): Promise<void>;
 
   getDashboard(): Promise<DashboardSummary>;
 

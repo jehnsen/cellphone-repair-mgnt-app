@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="grid min-h-dvh place-items-center bg-paper p-6">
         <div className="w-full max-w-md rounded-lg border border-rule bg-copy p-5 shadow-panel">
-          <p className="label-pad">Job order</p>
+          <p className="label-pad">Nelson Cellphone & Computer Repair</p>
           <p className="mt-2 text-sm font-semibold text-ink">
             {authError?.message ?? "The shop server did not answer."}
           </p>
@@ -87,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="grid min-h-dvh place-items-center bg-paper p-6">
         <div className="w-full max-w-sm border border-rule bg-copy p-6 shadow-panel">
-          <p className="label-pad">Job order</p>
+          <p className="label-pad">Nelson Cellphone & Computer Repair</p>
           <p className="mt-2 text-sm text-ink">Loading the shop&rsquo;s records.</p>
           <div
             className="mt-4 h-1 w-full overflow-hidden bg-secondary"

@@ -112,6 +112,27 @@ export interface DeviceInfo {
   unlockValue?: string;
 }
 
+/* ── Device reference data ─────────────────────────────────────────────
+   The brand and model lists behind the intake pickers, editable under
+   Settings. `DeviceCatalog` (in the contract) is the active-only, flat
+   read of the same rows the pickers use; these carry the full record. */
+
+export interface DeviceBrand {
+  id: ID;
+  name: string;
+  active: boolean;
+}
+
+export interface DeviceModel {
+  id: ID;
+  name: string;
+  brandId: ID;
+  /** Denormalised for the list; the set is small enough to carry it. */
+  brandName: string;
+  releaseYear?: number;
+  active: boolean;
+}
+
 export type TurnedOverAccessory = "sim" | "sd_card" | "case" | "charger" | "box";
 
 export type ConditionCheck =

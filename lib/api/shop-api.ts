@@ -58,7 +58,14 @@ const MUTATIONS = new Set<keyof ShopApi>([
   "createCustomer",
   "updateCustomer",
   "adjustStoreCredit",
+  "createDeviceBrand",
+  "updateDeviceBrand",
+  "deleteDeviceBrand",
+  "createDeviceModel",
+  "updateDeviceModel",
+  "deleteDeviceModel",
   "createSale",
+  "createService",
   "receiveStock",
   "adjustStock",
   "openShift",
@@ -189,6 +196,12 @@ function wrap(
         result
       ) {
         deps.dispatchQuiet({ type: "upsertCustomer", customer: result as Customer });
+      }
+      /* POS reads `db.services` directly (no `useQuery`), so a service created
+         at the counter has to land in the cache for the picker to see it this
+         session. */
+      if (method === "createService" && result) {
+        deps.dispatchQuiet({ type: "upsertService", service: result as ServiceItem });
       }
       if (MUTATIONS.has(method)) {
         deps.dispatch({ type: "touch" });

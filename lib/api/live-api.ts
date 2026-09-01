@@ -33,6 +33,9 @@ import {
   toUser,
   toRepairFinding,
   toStoreCredit,
+  toDeviceBrand,
+  toDeviceModel,
+  toServiceItem,
 } from "@/lib/api/mappers";
 import type {
   DashboardSummary,
@@ -690,6 +693,91 @@ export function createLiveApi(
       ).sort((a, b) => a.localeCompare(b));
 
       return { brands, models };
+    },
+
+    /* ── Device reference data (managed under Settings → Devices) ──────
+       The active-only `getDeviceCatalog` above feeds the pickers; these
+       return everything so an inactive row can be edited back on. */
+
+    async getDeviceBrands() {
+      const rows = await client.getAll<DeviceBrandDto>("/device-brands", {
+        query: { sort: "name" },
+      });
+      return rows.map(toDeviceBrand);
+    },
+
+    async createDeviceBrand({ name }) {
+      const { data } = await client.post<DeviceBrandDto>("/device-brands", {
+        body: { name: name.trim(), is_active: true },
+      });
+      return toDeviceBrand(data);
+    },
+
+    async updateDeviceBrand({ id, name, active }) {
+      const body: Record<string, unknown> = {};
+      if (name !== undefined) body.name = name.trim();
+      if (active !== undefined) body.is_active = active;
+      const { data } = await client.patch<DeviceBrandDto>(`/device-brands/${id}`, {
+        body,
+      });
+      return toDeviceBrand(data);
+    },
+
+    async deleteDeviceBrand(id) {
+      await client.delete(`/device-brands/${id}`);
+    },
+
+    async getDeviceModels() {
+      const rows = await client.getAll<DeviceModelDto>("/device-models", {
+        query: { sort: "name" },
+      });
+      return rows.map(toDeviceModel);
+    },
+
+    async createDeviceModel({ brandId, name, releaseYear }) {
+      const { data } = await client.post<DeviceModelDto>("/device-models", {
+        body: {
+          device_brand_ulid: brandId,
+          name: name.trim(),
+          release_year: releaseYear ?? null,
+          is_active: true,
+        },
+      });
+      return toDeviceModel(data);
+    },
+
+    async updateDeviceModel({ id, name, brandId, releaseYear, active }) {
+      const body: Record<string, unknown> = {};
+      if (name !== undefined) body.name = name.trim();
+      if (brandId !== undefined) body.device_brand_ulid = brandId;
+      if (releaseYear !== undefined) body.release_year = releaseYear;
+      if (active !== undefined) body.is_active = active;
+      const { data } = await client.patch<DeviceModelDto>(`/device-models/${id}`, {
+        body,
+      });
+      return toDeviceModel(data);
+    },
+
+    async deleteDeviceModel(id) {
+      await client.delete(`/device-models/${id}`);
+    },
+
+    /* ── Services ──────────────────────────────────────────────────────
+       The counter needs to ring up one-off labour. The server prices a
+       service line from the service record (no per-line override), so the
+       one-off is created here as a catalog row and then sold like any
+       other. */
+
+    async createService({ name, price, category }) {
+      const { data } = await client.post<ServiceDto>("/services", {
+        body: {
+          name: name.trim(),
+          default_price: money(price),
+          category: category?.trim() || "custom",
+          is_active: true,
+        },
+      });
+      return toServiceItem(data);
     },
 
     /* ── People ────────────────────────────────────────────────────── */

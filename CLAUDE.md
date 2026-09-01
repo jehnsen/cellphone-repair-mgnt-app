@@ -19,6 +19,11 @@ things `tsc` cannot, notably a `useSearchParams()` call that isn't wrapped in
 `<Suspense>`. If a build fails with a `_document` / `PageNotFoundError` on
 `/404`, that's a stale cache — `rm -rf .next` and rebuild.
 
+On a memory-tight machine the build can OOM ("Fatal process out of memory:
+Zone") during *Collecting page data* / static generation even though compile and
+type-check passed. It is not a code fault — rerun with a bigger heap:
+`NODE_OPTIONS=--max-old-space-size=8192 npm run build`.
+
 Kill stray dev servers before screenshotting or driving the app; an old server
 on port 3000 will happily serve a build from before your changes.
 
@@ -34,6 +39,15 @@ only way to see the loading, empty, and error states on demand.
 
 A front end for a single-branch Philippine cellphone repair shop: intake →
 repair board → release, plus POS, inventory, customers, and reports.
+
+The counter side also covers: a cash **drawer** that opens, takes cash in/out,
+and closes against a counted total (`app/pos`); **store credit** per customer,
+with a manager/owner adjustment (`app/customers`); a **trade-in** applied as
+tender on a POS sale (the buy-back acquisition itself has no UI yet — see
+`PENDING_CONTEXTS`); a **custom service** rung up at the counter (created as a
+real catalog row, because the server prices a service line from the record —
+there is no per-line override); and **device brand/model** CRUD under
+Settings → Devices.
 
 **The backend is a Laravel API.** There is no sample-data mode and no seeded
 rows: if a record is on screen, it was read from the shop database. Point the
@@ -63,9 +77,11 @@ Two things to know about how permissions behave in practice:
 `app/` or `components/` knows about HTTP. Two implementations compose into one
 object in `lib/api/shop-api.ts`:
 
-- **`live-*.ts`** — the real client. `live-api.ts` (tickets, customers, users),
-  `live-commerce.ts` (inventory, sales, shifts), `live-settings.ts` (branch,
-  settings, message templates), `live-reports.ts` (the server's aggregates).
+- **`live-*.ts`** — the real client. `live-api.ts` (tickets, customers, store
+  credit, users, the device brand/model catalog, ad-hoc services),
+  `live-commerce.ts` (inventory, sales incl. trade-in payments, shifts and cash
+  movements), `live-settings.ts` (branch, settings, message templates),
+  `live-reports.ts` (the server's aggregates).
 - **`unavailable.ts`** — the floor beneath them, so the object is always
   complete. Whatever the API has not built yet **reads empty and writes throw**
   `NOT_IMPLEMENTED` naming the missing endpoint. It never invents a row.
@@ -127,6 +143,34 @@ Don't reimplement these inline:
   grouping, and the terse durations the board reads constantly. Models hold
   numbers and ISO strings; these are the only place they become text.
 
+### How the counter's money moves
+
+The server, not the client, is the pricing authority for a sale — POS sends what
+is being sold and how many; unit prices, VAT, and the statutory discount all
+come back computed (`createSale` in `live-commerce.ts`). Consequences worth
+knowing:
+
+- **A service line is priced from the service record.** There is no per-line
+  price override on the wire, so a walk-in / one-off charge must exist as a
+  catalog row. `ServicePickerDialog`'s "Custom service" mode calls
+  `createService` (`POST /services`) and then rings the new row like any other.
+- **Payments are separate calls.** A sale is created, then each payment is
+  POSTed to it — which is also how a split tender is expressed. A `trade_in`
+  payment carries `acquisition_ulid` instead of a reference and never touches
+  `expected_cash`; the server caps it at the acquisition's offered price.
+- **Store credit** is customer-scoped and lives on `ShopApi`
+  (`getStoreCredit` / `adjustStoreCredit`), not in `db` — the customer detail
+  fetches it per-customer with `useQuery`. A manual adjustment is manager/owner
+  only server-side; the UI gates the button on `can("settings.manage")` and
+  still lets a 403 render as a plain message.
+- **The drawer** opens, takes `addCashMovement` (cash in/out), and closes with
+  `closeShift` against a counted total; `expected_cash` is the server's own
+  reconciliation and is never recomputed here.
+- **`getDeviceCatalog`** stays the active-only, flat feed for the intake
+  pickers. The Settings → Devices tab manages the same rows through
+  `getDeviceBrands` / `getDeviceModels` (everything, inactive included) plus
+  create / update / delete.
+
 ### Screen conventions
 
 Routes live in `app/`. Most `page.tsx` files are 5-line wrappers around a
@@ -172,19 +216,27 @@ it.
 
 ## Verifying UI work
 
-There's no browser tool wired up, but Chrome is installed and works headless:
+There's no browser tool wired up, but Chrome is installed and works headless.
+This machine is **Windows**; Chrome is at
+`C:\Program Files\Google\Chrome\Application\chrome.exe`.
 
-```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --headless --disable-gpu --no-sandbox --hide-scrollbars \
-  --virtual-time-budget=10000 --window-size=1440,900 \
-  --screenshot=/tmp/shot.png http://localhost:3000/board
-```
+The one-shot `--screenshot=` flag is unreliable here (and `--headless=new`
+ignores it). What works: launch with `--headless=new --remote-debugging-port=9222
+--remote-allow-origins=*`, then drive it over the DevTools Protocol — Node 22 has
+a global `WebSocket`, so a dependency-free CDP client is a ~40-line script
+(`Page.navigate`, `Runtime.evaluate`, `Page.captureScreenshot`). CDP responses
+nest the payload at `msg.result.result.value` for `Runtime.evaluate`; unwrap it.
+`--window-size` includes browser chrome, so `Emulation.setDeviceMetricsOverride`
+for accurate mobile widths.
 
-Then read the PNG. Notes learned the hard way: `--headless=new` doesn't write
-screenshots; `--window-size` includes browser chrome, so use CDP
-`Emulation.setDeviceMetricsOverride` for accurate mobile widths rather than
-trusting a narrow window; and `timeout` isn't available on this machine.
+**A real Laravel API is already running on this machine** at
+`http://127.0.0.1:8000/api/v1` with a seeded shop. Sign in through the app's own
+`/login` form (`ricardo.santos@fixmo.test` / `password`, an owner), or
+`POST /auth/token` for a bearer token to probe endpoints directly. Because it is
+the real shop DB, treat writes as real: void a stray probe sale
+(`POST /sales/{ulid}/void` needs `void_reason`), delete a throwaway
+brand/model/service. `next dev` falls back to **port 3001** when a stale server
+holds 3000 — point the driver at the port it actually bound.
 
 Recharts animates marks in from zero on mount, so a headless screenshot catches
 an empty plot — pass `isAnimationActive={false}` (also better for a dashboard).

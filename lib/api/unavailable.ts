@@ -86,6 +86,30 @@ export function createUnavailableApi(): ShopApi {
     async getDeviceCatalog() {
       return { brands: [], models: [] };
     },
+    async getDeviceBrands() {
+      return [];
+    },
+    async createDeviceBrand() {
+      throw missing("Adding a device brand", "POST /device-brands");
+    },
+    async updateDeviceBrand() {
+      throw missing("Editing a device brand", "PATCH /device-brands/{ulid}");
+    },
+    async deleteDeviceBrand() {
+      throw missing("Deleting a device brand", "DELETE /device-brands/{ulid}");
+    },
+    async getDeviceModels() {
+      return [];
+    },
+    async createDeviceModel() {
+      throw missing("Adding a device model", "POST /device-models");
+    },
+    async updateDeviceModel() {
+      throw missing("Editing a device model", "PATCH /device-models/{ulid}");
+    },
+    async deleteDeviceModel() {
+      throw missing("Deleting a device model", "DELETE /device-models/{ulid}");
+    },
     async getMovements() {
       return [];
     },
@@ -112,6 +136,9 @@ export function createUnavailableApi(): ShopApi {
     },
     async createSale() {
       throw missing("Ringing up a sale", "POST /sales");
+    },
+    async createService() {
+      throw missing("Adding a service", "POST /services");
     },
     async getShifts() {
       return [];
