@@ -34,6 +34,7 @@ import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { TagHead } from "@/components/tag/tag-head";
 import { FindingPanel } from "@/components/ticket/finding-panel";
 import { PaymentDialog } from "@/components/ticket/payment-dialog";
+import { AssignTechnicianDialog } from "@/components/ticket/assign-technician-dialog";
 import { useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
 import { agingOf } from "@/lib/status";
@@ -66,7 +67,7 @@ const TURNED_OVER_LABEL: Record<string, string> = {
 
 export function TicketView({ ticketId }: { ticketId: string }) {
   const router = useRouter();
-  const { db, user, api } = useShop();
+  const { db, user, api, can } = useShop();
 
   const {
     data: ticket,
@@ -90,6 +91,7 @@ export function TicketView({ ticketId }: { ticketId: string }) {
   const finding = localFinding ?? fetchedFinding ?? null;
 
   const [paying, setPaying] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [moveTo, setMoveTo] = useState<TicketStatus | null>(null);
   const [note, setNote] = useState("");
   const [moving, setMoving] = useState(false);
@@ -146,6 +148,8 @@ export function TicketView({ ticketId }: { ticketId: string }) {
   const { primary, secondary } = stageActions(ticket);
   const primaryMove = primary && primary.to !== "released" ? primary : null;
   const releasable = stageOf(ticket.status) === "ready";
+  /* A released job is closed; its bench assignment is history now. */
+  const canAssign = can("ticket.assign") && ticket.status !== "released";
 
   const applyMove = async () => {
     if (!moveTo) return;
@@ -187,7 +191,17 @@ export function TicketView({ ticketId }: { ticketId: string }) {
           { label: "Owed", value: peso(owed) },
           {
             label: "Technician",
-            value: technician?.name ?? "Unassigned",
+            value: canAssign ? (
+              <button
+                type="button"
+                onClick={() => setAssigning(true)}
+                className="tap -mx-1 rounded px-1 font-medium text-bench-ink hover:underline"
+              >
+                {technician?.name ?? "Assign…"}
+              </button>
+            ) : (
+              technician?.name ?? "Unassigned"
+            ),
           },
         ]}
         actions={
@@ -430,6 +444,13 @@ export function TicketView({ ticketId }: { ticketId: string }) {
         open={paying}
         onOpenChange={setPaying}
         onRecorded={refetch}
+      />
+
+      <AssignTechnicianDialog
+        ticket={ticket}
+        open={assigning}
+        onOpenChange={setAssigning}
+        onAssigned={refetch}
       />
 
       <Dialog

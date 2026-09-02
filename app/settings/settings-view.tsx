@@ -14,6 +14,7 @@ import {
   Smartphone,
   Trash2,
   UserCog,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
@@ -116,6 +117,11 @@ export function SettingsView() {
               <UserCog aria-hidden /> Staff
             </TabsTrigger>
           ) : null}
+          {canManageStaff ? (
+            <TabsTrigger value="technicians">
+              <Wrench aria-hidden /> Technicians
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="connection" className="space-y-4 pt-4 sm:space-y-5">
@@ -136,6 +142,11 @@ export function SettingsView() {
         {canManageStaff ? (
           <TabsContent value="staff" className="pt-4">
             <StaffTab />
+          </TabsContent>
+        ) : null}
+        {canManageStaff ? (
+          <TabsContent value="technicians" className="pt-4">
+            <TechniciansTab />
           </TabsContent>
         ) : null}
       </Tabs>
@@ -2013,17 +2024,214 @@ function StaffTab() {
   );
 }
 
+/* ── Technicians ─────────────────────────────────────────────────────── */
+
+/**
+ * The repair bench, on its own.
+ *
+ * A technician is a staff account whose role is `technician` (`isTechnician`
+ * mirrors that) — the people a job order can be assigned to, and the names that
+ * show up on the board and in throughput reports. This is the same
+ * `createUser` / `updateUser` / `deleteUser` the Staff tab uses, filtered to
+ * that role and with the role locked, so the owner can run the bench roster
+ * without wading through every cashier. Changing someone's role still happens
+ * on the Staff tab.
+ *
+ * Owner-only, same gate as Staff: the cross-branch `/users` read is a 403 for
+ * anyone else, reported plainly.
+ */
+function TechniciansTab() {
+  const { user: self, branches } = useShop();
+  const usersQuery = useQuery((api) => api.getUsers(), []);
+  const [dialog, setDialog] = useState<
+    { mode: "new" } | { mode: "edit"; staff: User } | null
+  >(null);
+  const [removing, setRemoving] = useState<User | null>(null);
+
+  const remove = useMutation((api, id: string) => api.deleteUser(id));
+
+  const technicians = useMemo(
+    () =>
+      (usersQuery.data ?? [])
+        .filter((row) => row.isTechnician)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [usersQuery.data],
+  );
+
+  if (usersQuery.loading && !usersQuery.data) {
+    return (
+      <Panel>
+        <LoadingRows rows={6} />
+      </Panel>
+    );
+  }
+  if (usersQuery.error) {
+    return permissionOr(usersQuery.error, "manage staff", usersQuery.refetch);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
+          The people a job order can be assigned to. Each is a staff account with
+          the technician role — they appear on the repair board and in throughput
+          reports. Removing one stops the sign-in; the jobs they worked keep
+          their name.
+        </p>
+        <Button size="sm" onClick={() => setDialog({ mode: "new" })}>
+          <Plus aria-hidden /> New technician
+        </Button>
+      </div>
+
+      {technicians.length === 0 ? (
+        <Panel>
+          <EmptyState
+            icon={Wrench}
+            title="No technicians yet."
+            body="Add an account with the technician role for each person on the repair bench, so job orders can be assigned to them by name."
+          />
+        </Panel>
+      ) : (
+        <Panel>
+          <PanelHeader>
+            <Wrench className="size-3.5 text-ink-faint" aria-hidden />
+            <PanelTitle>Repair bench</PanelTitle>
+            <span className="mono ml-auto text-xs text-ink-faint">
+              {count(technicians.length)}
+            </span>
+          </PanelHeader>
+          <ul className="divide-y divide-rule-soft">
+            {technicians.map((row) => (
+              <li
+                key={row.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:px-4"
+              >
+                <span className="mono grid size-7 shrink-0 place-items-center rounded-full bg-ink text-[0.625rem] font-semibold text-paper">
+                  {row.initials}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {row.name}
+                    {row.id === self.id ? (
+                      <span className="ml-1.5 text-xs font-normal text-ink-faint">
+                        (you)
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="mono truncate text-xs text-ink-faint">
+                    {row.employeeCode ? `${row.employeeCode} · ` : ""}
+                    {row.email ?? "no email"}
+                  </p>
+                </div>
+
+                {row.branchName ? (
+                  <Badge variant="outline">{row.branchName}</Badge>
+                ) : null}
+                {!row.active ? (
+                  <span className="text-xs text-ink-faint">Inactive</span>
+                ) : null}
+
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setDialog({ mode: "edit", staff: row })}
+                  >
+                    Edit
+                  </Button>
+                  {/* Never offer to delete the account you are signed in as. */}
+                  {row.id !== self.id ? (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setRemoving(row)}
+                      aria-label={`Remove ${row.name}`}
+                    >
+                      <Trash2 aria-hidden />
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      {dialog ? (
+        <StaffDialog
+          staff={dialog.mode === "edit" ? dialog.staff : undefined}
+          branches={branches}
+          lockRole="technician"
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog(null);
+            usersQuery.refetch();
+          }}
+        />
+      ) : null}
+
+      {removing ? (
+        <Dialog open onOpenChange={(open) => !open && setRemoving(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Remove {removing.name}?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm leading-relaxed text-ink-soft">
+              They stop being able to sign in, and drop off the list of
+              technicians a job can be assigned to. The jobs they already worked
+              keep their name.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setRemoving(null)}
+                disabled={remove.pending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={remove.pending}
+                onClick={async () => {
+                  const { error } = await remove.mutate(removing.id);
+                  if (error) {
+                    const { message, description } = toastError(
+                      error,
+                      "Could not remove the account.",
+                    );
+                    toast.error(message, { description });
+                  } else {
+                    toast.success(`${removing.name} removed.`);
+                    setRemoving(null);
+                    usersQuery.refetch();
+                  }
+                }}
+              >
+                {remove.pending ? "Removing…" : "Remove"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}
+
 /** The roles this screen can assign, in the order they read on the floor. */
 const ASSIGNABLE_ROLES: Role[] = ["cashier", "technician", "manager", "owner"];
 
 function StaffDialog({
   staff,
   branches,
+  lockRole,
   onClose,
   onSaved,
 }: {
   staff?: User;
   branches: BranchSummary[];
+  /** Fixes the role and hides the picker — used by the Technicians tab. */
+  lockRole?: Role;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -2037,7 +2245,7 @@ function StaffDialog({
   const [name, setName] = useState(staff?.name ?? "");
   const [email, setEmail] = useState(staff?.email ?? "");
   const [employeeCode, setEmployeeCode] = useState(staff?.employeeCode ?? "");
-  const [role, setRole] = useState<Role>(staff?.role ?? "cashier");
+  const [role, setRole] = useState<Role>(staff?.role ?? lockRole ?? "cashier");
   const [branchId, setBranchId] = useState(staff?.branchId ?? branches[0]?.id ?? "");
   const [password, setPassword] = useState("");
   const [active, setActive] = useState(staff?.active ?? true);
@@ -2097,7 +2305,11 @@ function StaffDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isEdit ? `Edit ${staff!.name}` : "New staff account"}
+            {isEdit
+              ? `Edit ${staff!.name}`
+              : lockRole
+                ? `New ${ROLE_LABEL[lockRole].toLowerCase()}`
+                : "New staff account"}
           </DialogTitle>
         </DialogHeader>
 
@@ -2138,18 +2350,27 @@ function StaffDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="staff-role">Role</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                <SelectTrigger id="staff-role" className="w-full min-w-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ASSIGNABLE_ROLES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {ROLE_LABEL[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {lockRole ? (
+                <div
+                  id="staff-role"
+                  className="flex h-9 items-center rounded-md border border-rule bg-secondary px-3 text-sm text-ink-soft"
+                >
+                  {ROLE_LABEL[role]}
+                </div>
+              ) : (
+                <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                  <SelectTrigger id="staff-role" className="w-full min-w-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ASSIGNABLE_ROLES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {ROLE_LABEL[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="staff-branch">Branch</Label>
@@ -2204,7 +2425,13 @@ function StaffDialog({
               Cancel
             </Button>
             <Button onClick={submit} disabled={!canSave}>
-              {pending ? "Saving…" : isEdit ? "Save changes" : "Add account"}
+              {pending
+                ? "Saving…"
+                : isEdit
+                  ? "Save changes"
+                  : lockRole
+                    ? `Add ${ROLE_LABEL[lockRole].toLowerCase()}`
+                    : "Add account"}
             </Button>
           </div>
         </div>
