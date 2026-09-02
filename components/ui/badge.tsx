@@ -5,12 +5,14 @@ import { Slot } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 /**
- * Pill-shaped, tech-retail style. The three neutral variants map to the fill
- * weights status uses (outline → tint → solid), so a badge can carry status
- * without borrowing a hue.
+ * A rectangular instrument tag, not a consumer pill — square-ish corners are
+ * what make a two-letter status code read as stamped on the unit rather than
+ * as a marketing chip. The three neutral variants map to the fill weights
+ * status uses (outline → tint → solid), so a badge can carry status without
+ * borrowing a hue.
  */
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-sm border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {

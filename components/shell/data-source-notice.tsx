@@ -25,7 +25,7 @@ export function DataSourceNotice({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border border-bench/30 bg-bench-fill px-2 py-0.5 text-[0.6875rem] font-medium text-bench-ink",
+          "inline-flex items-center gap-1.5 rounded-sm border border-bench/30 bg-bench-fill px-2 py-0.5 text-[0.6875rem] font-medium text-bench-ink",
           className,
         )}
         title={apiBaseUrl}
@@ -39,7 +39,7 @@ export function DataSourceNotice({
   return (
     <div
       className={cn(
-        "rounded-lg border border-rule bg-copy p-3 shadow-panel sm:p-4",
+        "rounded-sm border border-rule bg-copy p-3 shadow-panel sm:p-4",
         className,
       )}
     >
@@ -62,7 +62,7 @@ export function DataSourceNotice({
         {PENDING_CONTEXTS.map((line) => (
           <li key={line} className="flex gap-2 text-xs text-ink-soft">
             <span
-              className="mt-1.5 size-1 shrink-0 rounded-full bg-rule-strong"
+              className="mt-1.5 size-1 shrink-0 rounded-sm bg-rule-strong"
               aria-hidden
             />
             <span className="leading-relaxed">{line}</span>

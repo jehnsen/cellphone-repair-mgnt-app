@@ -453,7 +453,7 @@ export function PosView() {
               </form>
 
               {matches.length > 0 ? (
-                <ul className="mt-2 divide-y divide-rule-soft rounded-lg border border-rule">
+                <ul className="mt-2 divide-y divide-rule-soft rounded-sm border border-rule">
                   {matches.map((item) => {
                     const stock = itemStock(db, item.id);
                     return (
@@ -791,7 +791,7 @@ export function PosView() {
 
           {completed ? (
             <div className="space-y-3">
-              <div className="rounded-lg border border-rule bg-copy p-3">
+              <div className="rounded-sm border border-rule bg-copy p-3">
                 <div className="flex items-baseline justify-between">
                   <span className="mono text-sm font-semibold text-ink">
                     {completed.saleNo}
@@ -1075,7 +1075,7 @@ function ServicePickerDialog({
             <button
               type="button"
               onClick={() => setMode("custom")}
-              className="tap flex w-full items-center gap-2 rounded-lg border border-dashed border-rule px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-secondary"
+              className="tap flex w-full items-center gap-2 rounded-sm border border-dashed border-rule px-3 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-secondary"
             >
               <Plus className="size-3.5 shrink-0" aria-hidden />
               Custom service — name it and set the price
@@ -1088,7 +1088,7 @@ function ServicePickerDialog({
                 body="Try the service code, a different word, or add a custom one above."
               />
             ) : (
-              <ul className="max-h-[45vh] divide-y divide-rule-soft overflow-y-auto rounded-lg border border-rule">
+              <ul className="max-h-[45vh] divide-y divide-rule-soft overflow-y-auto rounded-sm border border-rule">
                 {rows.map((service) => (
                   <li key={service.id}>
                     <button
@@ -1194,7 +1194,7 @@ function CloseShiftDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <dl className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm">
+          <dl className="rounded-sm border border-rule bg-paper px-3 py-2 text-sm">
             <Row label="Opened" value={formatDateTime(shift.openedAt)} />
             <Row label="Starting cash" value={peso(shift.startingCash)} />
             {cashIn > 0 ? (

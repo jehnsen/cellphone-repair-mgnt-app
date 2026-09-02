@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { AgingStrip } from "@/components/tag/aging-strip";
 import { PageHeader } from "@/components/shell/page-header";
-import { DataSourceNotice } from "@/components/shell/data-source-notice";
 import {
   Panel,
   PanelBody,
@@ -144,7 +143,7 @@ export function DaySheetView() {
       {/* The drawer is the first thing to check at open. */}
       <div
         className={cn(
-          "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5 sm:px-4",
+          "flex flex-wrap items-center gap-3 rounded-sm border px-3 py-2.5 shadow-panel sm:px-4",
           shiftOpen ? "border-rule bg-copy" : "border-flag/40 bg-flag-fill",
         )}
       >
@@ -410,9 +409,9 @@ export function DaySheetView() {
                       {meta.label}
                     </span>
                     {/* Fixed-width track so every bar shares one scale. */}
-                    <span className="h-1.5 min-w-0 flex-1 rounded-full bg-secondary">
+                    <span className="h-1.5 min-w-0 flex-1 rounded-sm bg-secondary">
                       <span
-                        className="block h-full rounded-full bg-bench"
+                        className="block h-full rounded-sm bg-bench"
                         style={{ width: `${Math.round(share * 100)}%` }}
                         aria-hidden
                       />
@@ -443,14 +442,18 @@ export function DaySheetView() {
           ) : null}
         </div>
       </div>
-
-      {/* Where these numbers come from, and what is not wired up yet. */}
-      <DataSourceNotice />
     </div>
   );
 }
 
-/** A number that routes somewhere. Tone is spent on urgency only. */
+/**
+ * A number that routes somewhere. Tone is spent on urgency only — the tile is
+ * built as an instrument readout: a keyed corner, a mono legend, the figure
+ * large and tight, and a graduated rule under it like the scale on a gauge.
+ *
+ * The notch is a `clip-path`, which also clips a box shadow, so elevation
+ * here comes from the border and the ground rather than from `shadow-*`.
+ */
 function CountTile({
   label,
   value,
@@ -471,32 +474,53 @@ function CountTile({
   return (
     <Link
       href={href}
+      /* The bevel hairline has to match the border it continues. */
+      style={
+        {
+          "--notch-edge":
+            tone === "stamp"
+              ? "color-mix(in oklab, var(--stamp) 40%, transparent)"
+              : tone === "flag"
+                ? "color-mix(in oklab, var(--flag) 40%, transparent)"
+                : "var(--rule)",
+        } as CSSProperties
+      }
       className={cn(
-        "group rounded-lg border p-3 transition-colors sm:p-4",
+        "group notch relative overflow-hidden border p-3 transition-[background-color,border-color,transform] duration-150 hover:-translate-y-0.5 sm:p-4 [--notch:14px]",
         tone === "stamp"
-          ? "border-stamp/40 bg-stamp-fill hover:bg-stamp-fill/70"
+          ? "border-stamp/40 bg-stamp-fill hover:border-stamp/60"
           : tone === "flag"
-            ? "border-flag/40 bg-flag-fill hover:bg-flag-fill/70"
-            : "border-rule bg-copy shadow-panel hover:bg-secondary",
+            ? "border-flag/40 bg-flag-fill hover:border-flag/60"
+            : "border-rule bg-copy hover:border-bench/50",
       )}
     >
-      <div className="flex items-center gap-1.5">
-        <Icon
+      {/* A lit top edge on hover — the readout waking up. */}
+      <span
+        className={cn(
+          "absolute inset-x-0 top-0 h-px opacity-0 transition-opacity group-hover:opacity-100",
+          tone === "quiet" ? "rule-accent" : "bg-current",
+        )}
+        aria-hidden
+      />
+      <div className="flex items-center gap-2">
+        <span
           className={cn(
-            "size-3.5",
+            "grid size-6 shrink-0 place-items-center rounded-sm",
             tone === "stamp"
-              ? "text-stamp-ink"
+              ? "bg-stamp/15 text-stamp-ink"
               : tone === "flag"
-                ? "text-flag-ink"
-                : "text-ink-faint",
+                ? "bg-flag/15 text-flag-ink"
+                : "bg-bench-fill text-bench",
           )}
           aria-hidden
-        />
+        >
+          <Icon className="size-3.5" />
+        </span>
         <span className="label-pad">{label}</span>
       </div>
       <p
         className={cn(
-          "figure mt-1.5 text-2xl",
+          "figure mt-2.5 text-3xl",
           tone === "stamp"
             ? "text-stamp-ink"
             : tone === "flag"
@@ -506,7 +530,9 @@ function CountTile({
       >
         {loading ? "—" : count(value ?? 0)}
       </p>
-      <p className="mt-1 text-xs text-ink-soft">{hint}</p>
+      {/* The gauge scale under the reading. */}
+      <span className="graduated mt-2 block h-[3px] w-16 opacity-60" aria-hidden />
+      <p className="mt-1.5 text-xs text-ink-soft">{hint}</p>
     </Link>
   );
 }

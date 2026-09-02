@@ -15,6 +15,9 @@ interface ShiftStripProps {
 /**
  * The one strip that never changes across screens: search, theme, who you are,
  * and the way out. The day's counts live on the day sheet rather than here.
+ *
+ * Glass rather than a solid bar — content dims and blurs as it passes under,
+ * which is what tells you the page is scrolling behind a fixed chrome.
  */
 export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
   const router = useRouter();
@@ -57,15 +60,17 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
   return (
     <div
       className={cn(
-        "no-print sticky top-0 z-30 border-b border-rule bg-copy transition-shadow",
+        "no-print glass sticky top-0 z-30 border-b border-rule transition-shadow",
         scrolled && "shadow-strip",
       )}
     >
+      {/* Status-bar hairline: the brand gradient, one pixel, along the top. */}
+      <span className="rule-accent absolute inset-x-0 top-0 h-px" aria-hidden />
       <header className="flex h-14 items-center gap-2 px-2 sm:h-12 sm:px-3">
         <button
           type="button"
           onClick={onOpenNav}
-          className="hidden size-9 place-items-center rounded-sm border border-rule text-ink-soft transition-colors hover:bg-secondary md:grid lg:hidden"
+          className="hidden size-9 place-items-center rounded-sm border border-rule text-ink-soft transition-colors hover:border-bench/40 hover:bg-bench-fill hover:text-bench-ink md:grid lg:hidden"
           aria-label="Open navigation"
         >
           <Menu className="size-4" aria-hidden />
@@ -82,7 +87,7 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
             onChange={(changeEvent) => setTerm(changeEvent.target.value)}
             placeholder="Ticket, claim code, IMEI, or name"
             aria-label="Search tickets"
-            className="h-9 w-full rounded-sm border border-rule bg-paper pl-8 pr-16 text-sm transition-colors placeholder:text-ink-faint hover:border-rule-strong focus:bg-copy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring sm:h-8"
+            className="mono h-9 w-full rounded-sm border border-rule bg-secondary/60 pl-8 pr-16 text-sm transition-colors placeholder:text-ink-faint hover:border-rule-strong focus:border-bench/50 focus:bg-copy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring sm:h-8"
           />
           {term ? (
             <button
@@ -97,7 +102,7 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
               <X className="size-3.5" aria-hidden />
             </button>
           ) : (
-            <kbd className="mono pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-[3px] border border-rule px-1 text-[0.625rem] text-ink-faint sm:block">
+            <kbd className="mono pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md border border-rule bg-copy px-1.5 text-[0.625rem] text-ink-faint sm:block">
               /
             </kbd>
           )}
@@ -110,7 +115,7 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
           <button
             type="button"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="grid size-9 place-items-center rounded-full border border-rule text-ink-soft transition-colors hover:bg-secondary sm:size-8"
+            className="grid size-9 place-items-center rounded-sm border border-rule text-ink-soft transition-colors hover:border-bench/40 hover:bg-bench-fill hover:text-bench-ink sm:size-8"
             aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
           >
             {resolvedTheme === "dark" ? (
@@ -121,8 +126,8 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
           </button>
 
           {/* One operator, so this names them rather than offering a switch. */}
-          <span className="flex items-center gap-2 rounded-full border border-rule bg-copy py-1 pl-1 pr-2.5">
-            <span className="mono grid size-6 shrink-0 place-items-center rounded-full bg-ink text-[0.625rem] font-semibold text-paper">
+          <span className="flex items-center gap-2 rounded-sm border border-rule bg-copy py-1 pl-1 pr-2.5 shadow-panel">
+            <span className="brandmark notch [--notch-edge:transparent] mono grid size-6 shrink-0 place-items-center text-[0.625rem] font-semibold [--notch:5px]">
               {user.initials}
             </span>
             <span className="hidden text-xs font-medium leading-none text-ink sm:block">
@@ -136,7 +141,7 @@ export function ShiftStrip({ onOpenNav }: ShiftStripProps) {
               signOut();
               router.push("/login");
             }}
-            className="grid size-9 place-items-center rounded-full border border-rule text-ink-soft transition-colors hover:border-stamp/40 hover:bg-stamp-fill hover:text-stamp-ink sm:size-8"
+            className="grid size-9 place-items-center rounded-sm border border-rule text-ink-soft transition-colors hover:border-stamp/40 hover:bg-stamp-fill hover:text-stamp-ink sm:size-8"
             aria-label="Sign out"
             title="Sign out"
           >

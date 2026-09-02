@@ -103,7 +103,7 @@ export function PaymentDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <dl className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm">
+          <dl className="rounded-sm border border-rule bg-paper px-3 py-2 text-sm">
             <Row label="Job total" value={peso(ticket.totalDue)} />
             <Row label="Already paid" value={peso(ticket.amountPaid)} />
             <Row label="Still owed" value={peso(owed)} strong />

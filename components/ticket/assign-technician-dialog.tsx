@@ -120,7 +120,7 @@ export function AssignTechnicianDialog({
             </Select>
           </div>
         ) : (
-          <p className="rounded-lg border border-rule bg-paper px-3 py-2.5 text-sm text-ink-soft">
+          <p className="rounded-sm border border-rule bg-paper px-3 py-2.5 text-sm text-ink-soft">
             No one on staff is marked as a technician. Add or flag a technician
             in Settings → Staff first.
           </p>

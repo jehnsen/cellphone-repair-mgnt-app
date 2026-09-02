@@ -45,7 +45,7 @@ export function BranchSwitcher() {
     >
       <SelectTrigger
         aria-label="Branch"
-        className="h-9 w-auto gap-1.5 rounded-full border-rule pl-2.5 pr-2 text-xs font-medium sm:h-8"
+        className="h-9 w-auto gap-1.5 rounded-sm border-rule pl-2.5 pr-2 text-xs font-medium sm:h-8"
       >
         <Building2 className="size-3.5 shrink-0 text-ink-soft" aria-hidden />
         {/* The label is rendered here rather than through `SelectValue`: the

@@ -54,7 +54,7 @@ export function CustomerPicker({
     return (
       <div
         className={cn(
-          "flex items-center gap-3 rounded-lg border border-rule bg-copy px-3 py-2.5",
+          "flex items-center gap-3 rounded-sm border border-rule bg-copy px-3 py-2.5",
           className,
         )}
       >

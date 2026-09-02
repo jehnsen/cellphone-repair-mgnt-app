@@ -30,7 +30,7 @@ export function MobileNav({
   return (
     <nav
       aria-label="Primary"
-      className="no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-flow-col border-t border-rule bg-copy shadow-[0_-6px_16px_-14px_rgb(0_0_0/0.5)] md:hidden"
+      className="no-print glass safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-flow-col border-t border-rule shadow-[0_-8px_24px_-16px_rgb(0_0_0/0.55)] md:hidden"
     >
       {primary.map((item) => {
         const active =
@@ -49,17 +49,29 @@ export function MobileNav({
             )}
           >
             {active ? (
-              <span className="absolute inset-x-3 top-0 h-[2px] bg-bench" aria-hidden />
+              <span
+                className="rule-accent absolute inset-x-4 top-0 h-[2px] rounded-sm"
+                aria-hidden
+              />
             ) : null}
             <span className="relative">
+              {active ? (
+                <span
+                  className="absolute -inset-x-2.5 -inset-y-1.5 rounded-sm bg-bench-fill"
+                  aria-hidden
+                />
+              ) : null}
               <Icon
-                className={cn("size-5", active ? "text-bench" : "text-ink-faint")}
+                className={cn(
+                  "relative size-5",
+                  active ? "text-bench" : "text-ink-faint",
+                )}
                 aria-hidden
               />
               {count > 0 ? (
                 <span
                   className={cn(
-                    "mono absolute -right-2.5 -top-1.5 min-w-4 rounded-full px-1 text-center text-[0.625rem] font-semibold leading-4",
+                    "mono absolute -right-2.5 -top-1.5 min-w-4 rounded-sm px-1 text-center text-[0.625rem] font-semibold leading-4",
                     item.badge === "overdue"
                       ? "bg-stamp text-white"
                       : "bg-secondary text-ink-soft",

@@ -1,8 +1,12 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The one surface in the system. A rounded card with a soft shadow —
+ * The one surface in the system. A cut-cornered panel with a soft shadow —
  * everything that isn't a tag, a table, or a form field sits in one of these.
+ *
+ * Corner ticks (`.brackets`) frame it like an instrument bezel. They are
+ * pseudo-elements rather than a `clip-path` notch on purpose: clipping a box
+ * also clips its shadow, and these panels are the thing that floats.
  */
 export function Panel({
   className,
@@ -12,7 +16,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-col rounded-lg border border-rule bg-copy shadow-raised",
+        "brackets relative flex min-w-0 flex-col rounded-sm border border-rule bg-copy shadow-raised",
         className,
       )}
       {...props}
@@ -30,7 +34,7 @@ export function PanelHeader({
   return (
     <div
       className={cn(
-        "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule px-3 py-2 sm:min-h-10 sm:px-4",
+        "relative flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule px-3 py-2 sm:min-h-10 sm:px-4",
         className,
       )}
       {...props}
@@ -46,7 +50,17 @@ export function PanelTitle({
   ...props
 }: React.ComponentProps<"h2">) {
   return (
-    <h2 className={cn("label-bin text-ink", className)} {...props}>
+    <h2
+      className={cn("label-bin flex items-center gap-2 text-ink", className)}
+      {...props}
+    >
+      {/* Indicator lamp. Two pixels of accent is enough to say the bay is
+          live, and it gives the mono legend something to sit against. */}
+      <span
+        className="size-1.5 shrink-0 bg-bench"
+        style={{ boxShadow: "0 0 6px 0 var(--bench)" }}
+        aria-hidden
+      />
       {children}
     </h2>
   );

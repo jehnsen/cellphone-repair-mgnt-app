@@ -159,7 +159,7 @@ export function CustomersView() {
                           <BadgeCheck className="size-3.5 text-bench" aria-label="Senior/PWD on file" />
                         ) : null}
                         {openCount > 0 ? (
-                          <span className="mono rounded-full bg-secondary px-1.5 text-[0.6875rem] text-ink-soft">
+                          <span className="mono rounded-sm bg-secondary px-1.5 text-[0.6875rem] text-ink-soft">
                             {openCount}
                           </span>
                         ) : null}
@@ -608,7 +608,7 @@ function StoreCreditDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="flex items-baseline justify-between rounded-lg border border-rule bg-paper px-3 py-2 text-sm">
+          <div className="flex items-baseline justify-between rounded-sm border border-rule bg-paper px-3 py-2 text-sm">
             <span className="text-ink-soft">Current balance</span>
             <span className="mono font-semibold text-ink">{peso(balance)}</span>
           </div>

@@ -26,7 +26,7 @@ export function AgingStrip({
       className={cn(
         /* self-stretch, not h-full: the parent row rarely has a resolved
            height, so h-full collapses the strip to nothing. */
-        "block shrink-0 self-stretch rounded-full",
+        "block shrink-0 self-stretch rounded-sm",
         tier === "overdue" ? "w-1.5" : "w-1",
         tier === "fresh" && "bg-rule",
         tier === "soon" && "bg-flag",

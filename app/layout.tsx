@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ShopProvider } from "@/lib/shop/store";
 import { AppShell } from "@/components/shell/app-shell";
@@ -7,24 +7,24 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-/* Display: form labels and column headers. Archivo carries a width axis, so
-   dense table headers can narrow without a second family. */
-const display = Archivo({
+/* Display: headings, figures, and the micro labels. Space Grotesk's flat
+   terminals and single-storey `a` read as hardware spec, not as stationery —
+   it is what makes the shop look like it sells the devices it repairs. */
+const display = Space_Grotesk({
   subsets: ["latin"],
-  axes: ["wdth"],
   variable: "--font-display",
   display: "swap",
 });
 
-const body = IBM_Plex_Sans({
+/* Body: Inter, for the density this app runs at. */
+const body = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
   variable: "--font-body",
   display: "swap",
 });
 
 /* Identifiers and anything printed: IMEI, ticket numbers, thermal receipts. */
-const mono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-mono",

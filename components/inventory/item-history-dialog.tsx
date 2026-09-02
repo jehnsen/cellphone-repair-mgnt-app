@@ -70,7 +70,7 @@ export function ItemHistoryDialog({
         </DialogHeader>
 
         {item ? (
-          <div className="rounded-lg border border-rule bg-paper px-3 py-2">
+          <div className="rounded-sm border border-rule bg-paper px-3 py-2">
             <p className="text-sm font-medium text-ink">{item.name}</p>
             <p className="mono text-xs text-ink-soft">
               {item.sku} · {item.quantityOnHand} on hand

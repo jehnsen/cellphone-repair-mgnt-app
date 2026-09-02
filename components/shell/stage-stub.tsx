@@ -33,7 +33,7 @@ export function StageStub({
             {covers.map((line) => (
               <li key={line} className="flex gap-2.5 text-sm text-ink-soft">
                 <span
-                  className="mt-[0.45rem] size-1 shrink-0 rounded-full bg-rule-strong"
+                  className="mt-[0.45rem] size-1 shrink-0 rounded-sm bg-rule-strong"
                   aria-hidden
                 />
                 <span className="leading-relaxed">{line}</span>

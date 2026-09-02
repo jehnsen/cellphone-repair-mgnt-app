@@ -139,7 +139,7 @@ export function InventoryView() {
                 type="button"
                 onClick={() => setFilter(filter === "low" ? "all" : "low")}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors",
                   filter === "low"
                     ? "border-flag bg-flag-fill text-flag-ink"
                     : "border-rule bg-copy text-ink-soft hover:bg-secondary",
@@ -542,7 +542,7 @@ function ReceiveDialog({
                 {units.map((unit, index) => (
                   <div
                     key={unit.key}
-                    className="grid gap-2 rounded-lg border border-rule p-2.5 sm:grid-cols-2"
+                    className="grid gap-2 rounded-sm border border-rule p-2.5 sm:grid-cols-2"
                   >
                     <InputMono
                       value={unit.imei}

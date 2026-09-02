@@ -101,17 +101,15 @@ export function SettingsView() {
           <TabsTrigger value="branch">
             <Building2 aria-hidden /> Branch
           </TabsTrigger>
-          <TabsTrigger value="config">
+          {/* <TabsTrigger value="config">
             <SlidersHorizontal aria-hidden /> Configuration
-          </TabsTrigger>
+          </TabsTrigger> */}
           <TabsTrigger value="devices">
             <Smartphone aria-hidden /> Devices
           </TabsTrigger>
           <TabsTrigger value="templates">
             <MessageSquareText aria-hidden /> Message templates
           </TabsTrigger>
-          {/* Staff is owner-only: the server refuses the cross-branch read
-              to anyone else, and the tab reports that plainly. */}
           {canManageStaff ? (
             <TabsTrigger value="staff">
               <UserCog aria-hidden /> Staff
@@ -789,7 +787,7 @@ function ConfigTab() {
         </Panel>
       ))}
 
-      <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-rule bg-copy px-3 py-2 shadow-float sm:px-4">
+      <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-sm border border-rule bg-copy px-3 py-2 shadow-float sm:px-4">
         <span className="text-xs text-ink-soft">
           {edited.length
             ? `${edited.length} unsaved change${edited.length === 1 ? "" : "s"}`
@@ -1912,7 +1910,7 @@ function StaffTab() {
                   key={row.id}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:px-4"
                 >
-                  <span className="mono grid size-7 shrink-0 place-items-center rounded-full bg-ink text-[0.625rem] font-semibold text-paper">
+                  <span className="mono grid size-7 shrink-0 place-items-center rounded-sm bg-ink text-[0.625rem] font-semibold text-paper">
                     {row.initials}
                   </span>
 
@@ -2106,7 +2104,7 @@ function TechniciansTab() {
                 key={row.id}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 sm:px-4"
               >
-                <span className="mono grid size-7 shrink-0 place-items-center rounded-full bg-ink text-[0.625rem] font-semibold text-paper">
+                <span className="mono grid size-7 shrink-0 place-items-center rounded-sm bg-ink text-[0.625rem] font-semibold text-paper">
                   {row.initials}
                 </span>
 

@@ -206,7 +206,7 @@ export function ReportsView() {
             {SERIES.map((series) => (
               <span key={series.key} className="flex items-center gap-1.5 text-xs text-ink-soft">
                 <span
-                  className="h-0.5 w-3 rounded-full"
+                  className="h-0.5 w-3 rounded-sm"
                   style={{ background: series.token }}
                   aria-hidden
                 />
@@ -327,7 +327,7 @@ export function ReportsView() {
                 className="flex items-center gap-3 px-3 py-2.5 sm:px-4"
               >
                 <span
-                  className="size-2 shrink-0 rounded-full"
+                  className="size-2 shrink-0 rounded-sm"
                   style={{ background: series.token }}
                   aria-hidden
                 />
@@ -498,7 +498,7 @@ function StatTile({
   state?: { loading: boolean; error: Error | null };
 }) {
   return (
-    <div className="rounded-lg border border-rule bg-copy p-3 shadow-panel sm:p-4">
+    <div className="rounded-sm border border-rule bg-copy p-3 shadow-panel sm:p-4">
       <p className="label-pad">{label}</p>
       {state?.loading ? (
         <Skeleton className="mt-1.5 h-8 w-28" />
@@ -533,7 +533,7 @@ function TrendTooltip({ active, label, payload }: TooltipPayload) {
       {payload.map((entry) => (
         <p key={entry.dataKey} className="flex items-center gap-2">
           <span
-            className="size-1.5 rounded-full"
+            className="size-1.5 rounded-sm"
             style={{ background: entry.color }}
             aria-hidden
           />

@@ -13,28 +13,43 @@
    ========================================================================== */
 
 :root {
-  /* --- named palette: light (showroom counter, daylight) --- */
-  --paper: #f6f7f9;
+  /* --- named palette: light (showroom under glass, daylight) --- */
+  --paper: #f2f4fa;
   --copy: #ffffff;
-  --ink: #0f172a;
-  --ink-soft: #5b6472;
-  --ink-faint: #94a0b1;
-  --rule: #e2e5eb;
-  --rule-soft: #edeef2;
+  --ink: #0a0e1a;
+  --ink-soft: #565f78;
+  --ink-faint: #949db5;
+  --rule: #d8dded;
+  --rule-soft: #e9ecf5;
   /* Used where a boundary has to hold its own against a filled surface. */
-  --rule-strong: #c7ccd6;
+  --rule-strong: #c2c9da;
 
-  --bench: #2563eb;
-  --bench-ink: #1d4ed8;
-  --bench-fill: #e8f0fe;
+  --bench: #4f46e5;
+  --bench-ink: #4338ca;
+  --bench-fill: #ecebfd;
 
-  --stamp: #dc2626;
-  --stamp-ink: #b91c1c;
-  --stamp-fill: #fdecec;
+  /* The cyan end of the accent gradient. Spent on brand and liveness —
+     logo tiles, the rail's active marker, the login panel — never on
+     status, and never as a fill under text. */
+  --surge: #06b6d4;
+  --surge-ink: #0e7490;
+  --surge-fill: #e2f7fb;
 
-  --flag: #d97706;
+  --stamp: #e11d48;
+  --stamp-ink: #be123c;
+  --stamp-fill: #ffe8ee;
+
+  /* Confirmation. Spent on transient feedback only — a toast, an alert that
+     something worked — never on a board or tag surface, where hue means
+     lateness. Green against `--stamp`'s red is the classic CVD pair, so
+     everything using it also carries a distinct icon shape. */
+  --go: #16a34a;
+  --go-ink: #15803d;
+  --go-fill: #e8f8ee;
+
+  --flag: #f59e0b;
   --flag-ink: #b45309;
-  --flag-fill: #fef3e2;
+  --flag-fill: #fff3de;
 
   /* --- aging scale: hue is spent on urgency, never on status --- */
   --age-fresh: var(--rule);
@@ -48,15 +63,15 @@
      is never in competition. `-fill` is a wash a header block can sit on;
      the base is edge-only. Red is intentionally absent — it means overdue. */
   --stage-check: #64748b;
-  --stage-check-fill: #f1f3f6;
-  --stage-wait-customer: #7c5cd6;
-  --stage-wait-customer-fill: #f2eefc;
+  --stage-check-fill: #f0f2f8;
+  --stage-wait-customer: #8b5cf6;
+  --stage-wait-customer-fill: #f3effe;
   --stage-wait-parts: var(--flag);
   --stage-wait-parts-fill: var(--flag-fill);
   --stage-repair: var(--bench);
   --stage-repair-fill: var(--bench-fill);
   --stage-ready: #0d9488;
-  --stage-ready-fill: #e2f4f1;
+  --stage-ready-fill: #e0f4f1;
 
   /* --- chart ramp: ink first, one accent --- */
   --chart-1: var(--bench);
@@ -83,9 +98,9 @@
   --popover-foreground: var(--ink);
   --primary: var(--bench);
   --primary-foreground: #ffffff;
-  --secondary: #eef1f5;
+  --secondary: #eaedf5;
   --secondary-foreground: var(--ink);
-  --muted: #eef1f5;
+  --muted: #eaedf5;
   --muted-foreground: var(--ink-soft);
   --accent: var(--bench-fill);
   --accent-foreground: var(--bench-ink);
@@ -95,50 +110,82 @@
   --input: var(--rule);
   --ring: var(--bench);
 
-  --radius: 0.625rem;
+  /* Machined, not pillowy. Everything in the app is cut from the same 4px
+     corner; the softness lives in the light, not in the geometry. */
+  --radius: 0.25rem;
+
+  /* --- the brand gradient. One diagonal, indigo into cyan. Everything that
+     carries the mark uses this, so the app has a single signature. --- */
+  --grad-accent: linear-gradient(135deg, var(--bench) 0%, #7c3aed 45%, var(--surge) 100%);
+  /* Glass sheen for filled controls — a light source above, not a bevel. */
+  --grad-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0) 60%);
+  /* Ambient wash behind the whole app. Barely there; it stops a full page of
+     panels reading as a spreadsheet. */
+  /* The grid is the robotic cue: a machine's reference plane, drawn once on
+     the canvas at the threshold of visibility — it should be felt rather than
+     read, so it stays under 4% and the cell stays wide. Push either up and it
+     starts competing with the content sitting on it. `--rule-line` is what the
+     grid is struck in; the two pools sit on top of it. */
+  --rule-line: color-mix(in oklab, var(--ink) 3%, transparent);
+  --grad-ambient:
+    radial-gradient(60rem 32rem at 8% -12%, color-mix(in oklab, var(--bench) 10%, transparent), transparent 62%),
+    radial-gradient(48rem 26rem at 102% -4%, color-mix(in oklab, var(--surge) 9%, transparent), transparent 60%),
+    linear-gradient(var(--rule-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule-line) 1px, transparent 1px);
+  --grid-cell: 48px;
 
   /* --- elevation: soft, real shadows — surfaces float above the page. --- */
-  --shadow-panel: 0 1px 2px 0 rgb(15 23 42 / 0.04);
-  --shadow-raised: 0 2px 4px -1px rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.08);
-  --shadow-float: 0 16px 32px -12px rgb(15 23 42 / 0.18), 0 4px 12px -4px rgb(15 23 42 / 0.1);
-  --shadow-strip: 0 1px 0 0 var(--rule), 0 8px 20px -16px rgb(15 23 42 / 0.35);
+  --shadow-panel: 0 1px 2px 0 rgb(10 14 26 / 0.05);
+  --shadow-raised: 0 1px 2px 0 rgb(10 14 26 / 0.05), 0 8px 20px -12px rgb(10 14 26 / 0.22);
+  --shadow-float: 0 24px 48px -16px rgb(10 14 26 / 0.24), 0 6px 16px -6px rgb(10 14 26 / 0.12);
+  --shadow-strip: 0 1px 0 0 var(--rule), 0 10px 26px -22px rgb(10 14 26 / 0.5);
+  /* Reserved for the one primary action on a screen. */
+  --shadow-glow: 0 6px 18px -8px color-mix(in oklab, var(--bench) 60%, transparent);
 }
 
 .dark {
-  /* --- the showroom at night: cool charcoal, never sepia --- */
-  --paper: #0b0f17;
-  --copy: #131926;
-  --ink: #eef1f6;
-  --ink-soft: #9aa4b6;
-  --ink-faint: #647089;
-  --rule: #232b3d;
-  --rule-soft: #1a2130;
-  --rule-strong: #333e56;
+  /* --- the showroom at night: black glass, cool light, never sepia --- */
+  --paper: #070a12;
+  --copy: #0e1220;
+  --ink: #eaeefb;
+  --ink-soft: #99a3bd;
+  --ink-faint: #626d8a;
+  --rule: #232a3f;
+  --rule-soft: #171c2b;
+  --rule-strong: #333c56;
 
-  --bench: #3b82f6;
-  --bench-ink: #60a5fa;
-  --bench-fill: #16233d;
+  --bench: #6366f1;
+  --bench-ink: #a5b4fc;
+  --bench-fill: #1a1d3d;
 
-  --stamp: #f87171;
-  --stamp-ink: #fca5a5;
-  --stamp-fill: #3a1a1a;
+  --surge: #22d3ee;
+  --surge-ink: #67e8f9;
+  --surge-fill: #0f2c34;
 
-  --flag: #f0a63a;
-  --flag-ink: #fbbf5c;
-  --flag-fill: #3a2712;
+  --stamp: #fb7185;
+  --stamp-ink: #fda4af;
+  --stamp-fill: #3b1420;
+
+  --go: #22c55e;
+  --go-ink: #86efac;
+  --go-fill: #0d2c1b;
+
+  --flag: #f5b23c;
+  --flag-ink: #fbc55f;
+  --flag-fill: #3a2a10;
 
   /* Board-column accents, dark: same hues, lifted for contrast on --copy;
      fills are deep washes, not bright panels. */
   --stage-check: #8a95a8;
-  --stage-check-fill: #1b2230;
-  --stage-wait-customer: #a48ae6;
-  --stage-wait-customer-fill: #241d38;
+  --stage-check-fill: #191f2e;
+  --stage-wait-customer: #a78bfa;
+  --stage-wait-customer-fill: #221b3a;
   --stage-wait-parts: var(--flag);
   --stage-wait-parts-fill: var(--flag-fill);
   --stage-repair: var(--bench);
   --stage-repair-fill: var(--bench-fill);
   --stage-ready: #2dd4bf;
-  --stage-ready-fill: #10312d;
+  --stage-ready-fill: #0d2f2c;
 
   --chart-1: var(--bench);
   --chart-2: #e7ebf3;
@@ -159,23 +206,33 @@
   --popover: var(--copy);
   --popover-foreground: var(--ink);
   --primary: var(--bench);
-  --primary-foreground: #0a1526;
-  --secondary: #1a2130;
+  --primary-foreground: #ffffff;
+  --secondary: #191f2e;
   --secondary-foreground: var(--ink);
-  --muted: #1a2130;
+  --muted: #191f2e;
   --muted-foreground: var(--ink-soft);
   --accent: var(--bench-fill);
   --accent-foreground: var(--bench-ink);
   --destructive: var(--stamp);
-  --destructive-foreground: #2a0f0f;
+  --destructive-foreground: #2a0a12;
   --border: var(--rule);
   --input: var(--rule);
   --ring: var(--bench);
 
-  --shadow-panel: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-raised: 0 2px 4px -1px rgb(0 0 0 / 0.45), 0 1px 3px 0 rgb(0 0 0 / 0.35);
-  --shadow-float: 0 20px 36px -12px rgb(0 0 0 / 0.65), 0 4px 14px -4px rgb(0 0 0 / 0.5);
-  --shadow-strip: 0 1px 0 0 var(--rule), 0 8px 20px -16px rgb(0 0 0 / 0.8);
+  --grad-accent: linear-gradient(135deg, var(--bench) 0%, #8b5cf6 45%, var(--surge) 100%);
+  --grad-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0) 60%);
+  --rule-line: color-mix(in oklab, var(--ink) 4%, transparent);
+  --grad-ambient:
+    radial-gradient(60rem 32rem at 8% -12%, color-mix(in oklab, var(--bench) 16%, transparent), transparent 62%),
+    radial-gradient(48rem 26rem at 102% -4%, color-mix(in oklab, var(--surge) 12%, transparent), transparent 60%),
+    linear-gradient(var(--rule-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule-line) 1px, transparent 1px);
+
+  --shadow-panel: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 8px 20px -12px rgb(0 0 0 / 0.7);
+  --shadow-float: 0 28px 52px -16px rgb(0 0 0 / 0.75), 0 6px 18px -6px rgb(0 0 0 / 0.55);
+  --shadow-strip: 0 1px 0 0 var(--rule), 0 10px 26px -22px rgb(0 0 0 / 0.9);
+  --shadow-glow: 0 8px 22px -8px color-mix(in oklab, var(--bench) 70%, transparent);
 }
 
 @theme inline {
@@ -197,6 +254,12 @@
   --color-flag: var(--flag);
   --color-flag-ink: var(--flag-ink);
   --color-flag-fill: var(--flag-fill);
+  --color-surge: var(--surge);
+  --color-surge-ink: var(--surge-ink);
+  --color-surge-fill: var(--surge-fill);
+  --color-go: var(--go);
+  --color-go-ink: var(--go-ink);
+  --color-go-fill: var(--go-fill);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -244,14 +307,19 @@
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, "Cascadia Mono", monospace;
 
+  /* One curve, five steps, all of them tight. A chip is nearly square, a
+     panel is a cut edge — the geometry reads as milled aluminium. */
   --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+  --radius-2xl: calc(var(--radius) + 6px);
 
   --shadow-panel: var(--shadow-panel);
   --shadow-raised: var(--shadow-raised);
   --shadow-float: var(--shadow-float);
   --shadow-strip: var(--shadow-strip);
+  --shadow-glow: var(--shadow-glow);
 }
 
 @layer base {
@@ -267,7 +335,20 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-sans);
+    /* Two very faint pools of brand light, fixed to the viewport, so a page
+       of white panels reads as a lit showroom rather than a spreadsheet.
+       Print resets `background` wholesale, which drops these with it. */
+    background-image: var(--grad-ambient);
+    /* Pools stretch; the grid tiles. Sizes pair with the layers above, in
+       order, so the last two are the grid's cell. */
+    background-size: auto, auto, var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell);
+    background-attachment: fixed;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+    /* `--font-sans` is declared in `@theme inline`, which inlines its value
+       into utilities rather than emitting the custom property — so `var(--font-sans)`
+       here resolves to nothing and body copy silently fell back to the system
+       stack. Reference the font-loader variable directly instead. */
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
     /* Money aligns in every table without opting in, per the type plan. */
     font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
@@ -326,17 +407,19 @@
 }
 
 @layer components {
-  /* Preprinted field label from a job order pad. */
+  /* Micro label — the legend etched beside a port, set in the same face as
+     the identifiers it sits above. Mono is what makes a label read as machine
+     legend rather than as small copy; the wide tracking keeps it from
+     clotting at this size. */
   .label-pad {
-    font-family: var(--font-display);
-    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-soft;
+    font-family: var(--font-mono);
+    @apply text-[0.625rem] font-medium uppercase tracking-[0.14em] text-ink-soft;
   }
 
-  /* Bin / column header, masking-tape label. */
+  /* Section / column header. Same voice, one step louder. */
   .label-bin {
-    font-family: var(--font-display);
-    font-stretch: 88%;
-    @apply text-xs font-semibold uppercase tracking-[0.07em];
+    font-family: var(--font-mono);
+    @apply text-[0.6875rem] font-medium uppercase tracking-[0.12em];
   }
 
   .mono {
@@ -350,19 +433,127 @@
   .figure {
     font-family: var(--font-display);
     font-variant-numeric: proportional-nums;
-    @apply font-semibold leading-none tracking-[-0.015em] text-ink;
+    @apply font-semibold leading-none tracking-[-0.03em] text-ink;
+  }
+
+  /* --- the three pieces of the tech-retail dress ---------------------- */
+
+  /* The mark. The only place the brand gradient appears at small size, so a
+     logo tile is never re-mixed by hand. */
+  .brandmark {
+    background-image: var(--grad-accent);
+    @apply text-white;
+  }
+
+  /* A bar that sits over content scrolling beneath it. Solid where the
+     browser has no backdrop-filter — never a see-through strip. */
+  .glass {
+    background-color: color-mix(in oklab, var(--copy) 80%, transparent);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background-color: var(--copy);
+    }
+  }
+
+  /* The accent as a hairline: a lit edge along the top of a strip or panel. */
+  .rule-accent {
+    background-image: var(--grad-accent);
+  }
+
+  /* --- machined detail ------------------------------------------------
+     Three details do the robotic work, and they are deliberately cheap:
+     a cut corner, a bracketed frame, and a graduated rule. Used sparingly —
+     on the surfaces that carry a reading, not on every box. */
+
+  /* A chamfered corner, bottom-right, like a keyed panel that only seats one
+     way round. `--notch` is the size of the cut.
+
+     `clip-path` removes the border along the diagonal — without a stroke the
+     corner reads torn rather than machined — so `::after` lays a hairline
+     back down the cut. It is sized 1.5× the hypotenuse and centred on the
+     cut's midpoint, so the clip trims the overhang and the line lands flush
+     at both ends. Elements using this cannot also use `.brackets`, and get
+     no box-shadow: clipping takes that with it. */
+  .notch {
+    --notch: 10px;
+    --notch-edge: var(--rule);
+    position: relative;
+    clip-path: polygon(
+      0 0,
+      100% 0,
+      100% calc(100% - var(--notch)),
+      calc(100% - var(--notch)) 100%,
+      0 100%
+    );
+  }
+
+  .notch::after {
+    content: "";
+    position: absolute;
+    right: calc(var(--notch) * -0.25);
+    bottom: calc(var(--notch) * 0.5);
+    width: calc(var(--notch) * 1.5);
+    height: 1px;
+    background: var(--notch-edge);
+    transform: rotate(-45deg);
+    pointer-events: none;
+  }
+
+  /* Corner ticks — an instrument frame drawn in the rule colour, sitting on
+     top of whatever surface it wraps. The element needs `relative`. */
+  .brackets::before,
+  .brackets::after {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-color: var(--rule-strong);
+    pointer-events: none;
+  }
+
+  .brackets::before {
+    top: 5px;
+    left: 5px;
+    border-top: 1px solid;
+    border-left: 1px solid;
+  }
+
+  .brackets::after {
+    bottom: 5px;
+    right: 5px;
+    border-bottom: 1px solid;
+    border-right: 1px solid;
+  }
+
+  /* A graduated rule — the ticks along the edge of a gauge. Sits as a 3px
+     strip; the repeat is what makes it read as a scale rather than a border. */
+  .graduated {
+    background-image: repeating-linear-gradient(
+      90deg,
+      var(--rule-strong) 0 1px,
+      transparent 1px 6px
+    );
+  }
+
+  /* Filled controls get a light source above them rather than a bevel. */
+  .sheen {
+    background-image: var(--grad-sheen);
   }
 
   /* Display type is set tight; the body face is not. Keeping this in one
      place stops every heading from inventing its own tracking. */
   .display-lg {
     font-family: var(--font-display);
-    @apply text-xl font-semibold leading-tight tracking-[-0.012em] text-ink sm:text-2xl;
+    @apply text-xl font-semibold leading-tight tracking-[-0.025em] text-ink sm:text-2xl;
   }
 
   .display-md {
     font-family: var(--font-display);
-    @apply text-base font-semibold leading-tight tracking-[-0.008em] text-ink sm:text-lg;
+    @apply text-base font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-lg;
   }
 
   /* One page gutter, one vertical rhythm, everywhere. */

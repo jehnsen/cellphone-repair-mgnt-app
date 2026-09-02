@@ -335,7 +335,7 @@ export function BoardView() {
         description={
           closedOnly
             ? "Closed jobs — unrepairable, returned unrepaired, released, and unclaimed."
-            : "Every open job, oldest promise first. Overdue jobs carry the vermilion edge."
+            : "Every open job, oldest promise first. Overdue jobs carry the red edge."
         }
         actions={
           closedOnly ? null : (
@@ -397,7 +397,7 @@ export function BoardView() {
         </Button>
 
         {search ? (
-          <span className="mono inline-flex items-center gap-1.5 rounded-full border border-rule bg-copy px-2.5 py-1 text-xs text-ink-soft">
+          <span className="mono inline-flex items-center gap-1.5 rounded-sm border border-rule bg-copy px-2.5 py-1 text-xs text-ink-soft">
             “{search}”
             <button
               type="button"
@@ -426,7 +426,7 @@ export function BoardView() {
       {error ? <ErrorState error={error} onRetry={refetch} /> : null}
 
       {selected.size > 0 ? (
-        <div className="sticky top-14 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-bench/30 bg-bench-fill px-3 py-2 shadow-raised sm:top-12">
+        <div className="sticky top-14 z-20 flex flex-wrap items-center gap-2 rounded-sm border border-bench/30 bg-bench-fill px-3 py-2 shadow-raised sm:top-12">
           <span className="text-sm font-semibold text-bench-ink">
             {selected.size} selected
           </span>
@@ -586,13 +586,13 @@ export function BoardView() {
                       })()}
                       <div
                         className={cn(
-                          "space-y-2 rounded-lg border border-transparent p-1 transition-colors",
+                          "space-y-2 rounded-sm border border-transparent p-1 transition-colors",
                           isTarget && "border-dashed border-bench bg-bench-fill",
                           draggingId && !droppable && "opacity-45",
                         )}
                       >
                         {columnTickets.length === 0 ? (
-                          <div className="rounded-lg border border-dashed border-rule-soft px-3 py-6 text-center text-xs text-ink-faint">
+                          <div className="rounded-sm border border-dashed border-rule-soft px-3 py-6 text-center text-xs text-ink-faint">
                             {isTarget ? "Drop to move here" : "Empty"}
                           </div>
                         ) : (
@@ -758,7 +758,7 @@ export function BoardView() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <ul className="max-h-40 divide-y divide-rule-soft overflow-y-auto rounded-lg border border-rule">
+            <ul className="max-h-40 divide-y divide-rule-soft overflow-y-auto rounded-sm border border-rule">
               {selectedTickets.map((ticket) => {
                 const customer = db.customers.find((c) => c.id === ticket.customerId);
                 return (
@@ -843,7 +843,7 @@ function BoardCard({
       /* The whole card drags; the checkbox and the link inside still take
          their own clicks, because a drag only starts once the pointer moves. */
       className={cn(
-        "flex items-stretch overflow-hidden rounded-lg border bg-copy shadow-raised transition-colors",
+        "flex items-stretch overflow-hidden rounded-sm border bg-copy shadow-raised transition-colors",
         selected ? "border-bench ring-1 ring-bench" : "border-rule",
         !disabled && "cursor-grab active:cursor-grabbing",
         dragging && "opacity-50",

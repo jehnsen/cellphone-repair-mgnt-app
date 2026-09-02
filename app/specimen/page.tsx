@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import { toast } from "sonner";
 import { STATUS_META, type Aging } from "@/lib/status";
 import { AgingStrip } from "@/components/tag/aging-strip";
 import { PageHeader } from "@/components/shell/page-header";
@@ -43,8 +44,16 @@ const SWATCHES: { token: string; label: string; role: string; className: string 
   { token: "--copy", label: "Copy", role: "Cards, inputs, print surfaces", className: "bg-copy" },
   { token: "--rule", label: "Rule", role: "Hairlines, field underlines", className: "bg-rule" },
   { token: "--bench", label: "Bench", role: "Primary action, focus ring", className: "bg-bench" },
+  { token: "--surge", label: "Surge", role: "Brand gradient only — never status", className: "bg-surge" },
+  { token: "--go", label: "Go", role: "Confirmation — toasts only", className: "bg-go" },
   { token: "--stamp", label: "Stamp", role: "Overdue, destructive", className: "bg-stamp" },
   { token: "--flag", label: "Flag", role: "Due soon, low stock", className: "bg-flag" },
+  {
+    token: "--grad-accent",
+    label: "Accent gradient",
+    role: "The mark, the lit edge, the active rail pill",
+    className: "rule-accent",
+  },
 ];
 
 const TIERS: { aging: Aging; label: string; note: string }[] = [
@@ -126,9 +135,12 @@ export default function Page() {
         <PanelHeader>
           <PanelTitle>Palette</PanelTitle>
         </PanelHeader>
-        <PanelBody className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <PanelBody className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
           {SWATCHES.map((swatch) => (
-            <div key={swatch.token} className="border border-rule bg-copy">
+            <div
+              key={swatch.token}
+              className="overflow-hidden rounded-sm border border-rule bg-copy shadow-panel"
+            >
               <div className={`h-14 border-b border-rule ${swatch.className}`} />
               <div className="px-2.5 py-2">
                 <p className="text-sm font-semibold text-ink">{swatch.label}</p>
@@ -143,7 +155,7 @@ export default function Page() {
       <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
         <Panel>
           <PanelHeader>
-            <PanelTitle>Display — Archivo</PanelTitle>
+            <PanelTitle>Display — Space Grotesk</PanelTitle>
           </PanelHeader>
           <PanelBody>
             <p className="display-lg">Ready for pickup</p>
@@ -154,7 +166,7 @@ export default function Page() {
 
         <Panel>
           <PanelHeader>
-            <PanelTitle>Body — IBM Plex Sans</PanelTitle>
+            <PanelTitle>Body — Inter</PanelTitle>
           </PanelHeader>
           <PanelBody>
             <p className="text-sm leading-relaxed text-ink">
@@ -172,7 +184,7 @@ export default function Page() {
 
         <Panel>
           <PanelHeader>
-            <PanelTitle>Mono — IBM Plex Mono</PanelTitle>
+            <PanelTitle>Mono — JetBrains Mono</PanelTitle>
           </PanelHeader>
           <PanelBody className="space-y-1">
             <p className="mono text-sm text-ink">JO-202608-0142</p>
@@ -368,12 +380,108 @@ export default function Page() {
           ].map((level) => (
             <div
               key={level.label}
-              className={`border border-rule bg-copy p-3 ${level.className}`}
+              className={`rounded-sm border border-rule bg-copy p-3 ${level.className}`}
             >
               <p className="text-sm font-semibold text-ink">{level.label}</p>
               <p className="mt-0.5 text-xs leading-snug text-ink-soft">{level.note}</p>
             </div>
           ))}
+        </PanelBody>
+      </Panel>
+
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Machined detail</PanelTitle>
+        </PanelHeader>
+        <PanelBody>
+          <p className="max-w-prose text-sm leading-relaxed text-ink-soft">
+            Four details carry the robotic read, and they are deliberately
+            cheap. Spend them on surfaces that carry a reading — not on every
+            box, or the page turns into a diagram of itself.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="notch border border-rule bg-paper p-3 [--notch:14px]">
+              <p className="label-pad">.notch</p>
+              <p className="mt-1 text-xs leading-snug text-ink-soft">
+                A keyed corner. Clips the box shadow with it, so use it on flat
+                surfaces and set <span className="mono">--notch-edge</span> to
+                match the border.
+              </p>
+            </div>
+            <div className="brackets relative border border-rule bg-paper p-3">
+              <p className="label-pad">.brackets</p>
+              <p className="mt-1 text-xs leading-snug text-ink-soft">
+                An instrument bezel drawn in pseudo-elements, so the surface
+                keeps its shadow. Every Panel wears these.
+              </p>
+            </div>
+            <div className="border border-rule bg-paper p-3">
+              <p className="label-pad">.graduated</p>
+              <span className="graduated mt-2 block h-[3px] w-full opacity-70" aria-hidden />
+              <p className="mt-2 text-xs leading-snug text-ink-soft">
+                The scale beside a reading. A 3px strip, never a border.
+              </p>
+            </div>
+            <div className="border border-rule bg-paper p-3">
+              <p className="label-pad">Indicator</p>
+              <span
+                className="mt-2 block size-1.5 bg-bench"
+                style={{ boxShadow: "0 0 6px 0 var(--bench)" }}
+                aria-hidden
+              />
+              <p className="mt-2 text-xs leading-snug text-ink-soft">
+                A lit square says the bay is live. It leads every panel legend.
+              </p>
+            </div>
+          </div>
+        </PanelBody>
+      </Panel>
+
+      <Panel>
+        <PanelHeader>
+          <PanelTitle>Toasts</PanelTitle>
+        </PanelHeader>
+        <PanelBody>
+          <p className="max-w-prose text-sm leading-relaxed text-ink-soft">
+            Every action the counter takes answers with one of these. Type is
+            carried by both a hue and an icon shape, because green against red
+            is the one pair colour-blind users cannot separate. Fire one to
+            check it in the current theme.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toast.success("Moved 1 ticket to waiting for customer.")}
+            >
+              Success
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                toast.error("That IMEI does not match this job order.", {
+                  description: "Check the unit against the claim stub before releasing.",
+                })
+              }
+            >
+              Error
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toast.warning("Only 2 in stock.")}
+            >
+              Warning
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toast.info("Reading the shop’s records again.")}
+            >
+              Info
+            </Button>
+          </div>
         </PanelBody>
       </Panel>
     </div>

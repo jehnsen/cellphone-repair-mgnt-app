@@ -330,7 +330,7 @@ function Workflows() {
         <details
           key={flow.title}
           open={i === 0}
-          className="group rounded-lg border border-rule bg-copy shadow-panel [&_summary::-webkit-details-marker]:hidden"
+          className="group rounded-sm border border-rule bg-copy shadow-panel [&_summary::-webkit-details-marker]:hidden"
         >
           <summary className="tap flex cursor-pointer list-none items-center gap-3 px-3 py-3 sm:px-4">
             <span className="mono text-xs font-semibold text-ink-faint">

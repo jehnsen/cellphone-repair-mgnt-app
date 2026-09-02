@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { Wrench } from "lucide-react";
 import { NavRail } from "@/components/shell/nav-rail";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { ShiftStrip } from "@/components/shell/shift-strip";
@@ -54,8 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (auth === "unreachable") {
     return (
       <div className="grid min-h-dvh place-items-center bg-paper p-6">
-        <div className="w-full max-w-md rounded-lg border border-rule bg-copy p-5 shadow-panel">
-          <p className="label-pad">Nelson Cellphone & Computer Repair</p>
+        <div className="w-full max-w-md rounded-sm border border-rule bg-copy p-5 shadow-float">
+          <p className="label-pad">Nelson Cellphone &amp; Computer Repair</p>
           <p className="mt-2 text-sm font-semibold text-ink">
             {authError?.message ?? "The shop server did not answer."}
           </p>
@@ -66,14 +67,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={retry}
-              className="tap rounded-md bg-bench px-3 text-sm font-medium text-white"
+              className="sheen tap rounded-md bg-bench px-3 text-sm font-medium text-white shadow-glow"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => router.replace("/login")}
-              className="tap rounded-md border border-rule bg-copy px-3 text-sm font-medium text-ink"
+              className="tap rounded-md border border-rule bg-copy px-3 text-sm font-medium text-ink shadow-panel"
             >
               Sign in again
             </button>
@@ -86,15 +87,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready) {
     return (
       <div className="grid min-h-dvh place-items-center bg-paper p-6">
-        <div className="w-full max-w-sm border border-rule bg-copy p-6 shadow-panel">
-          <p className="label-pad">Nelson Cellphone & Computer Repair</p>
-          <p className="mt-2 text-sm text-ink">Loading the shop&rsquo;s records.</p>
+        <div className="w-full max-w-sm rounded-sm border border-rule bg-copy p-6 shadow-float">
+          <span className="brandmark mb-4 grid size-10 place-items-center rounded-sm shadow-glow">
+            <Wrench className="size-5" aria-hidden />
+          </span>
+          <p className="label-pad">Nelson Cellphone &amp; Computer Repair</p>
+          <p className="mt-1.5 text-sm text-ink">Loading the shop&rsquo;s records.</p>
           <div
-            className="mt-4 h-1 w-full overflow-hidden bg-secondary"
+            className="mt-4 h-1 w-full overflow-hidden rounded-sm bg-secondary"
             role="progressbar"
             aria-label="Loading shop records"
           >
-            <div className="h-full w-1/3 animate-pulse bg-bench" />
+            <div className="rule-accent h-full w-1/3 animate-pulse rounded-sm" />
           </div>
         </div>
       </div>
@@ -102,17 +106,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh bg-paper">
+    <div className="flex min-h-dvh">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:border focus:border-rule focus:bg-copy focus:px-3 focus:py-2 focus:text-sm focus:shadow-float"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-sm focus:border focus:border-rule focus:bg-copy focus:px-3 focus:py-2 focus:text-sm focus:shadow-float"
       >
         Skip to content
       </a>
 
       <aside
         className={cn(
-          "no-print sticky top-0 hidden h-dvh shrink-0 border-r border-rule bg-paper transition-[width] duration-200 lg:block",
+          "no-print sticky top-0 hidden h-dvh shrink-0 border-r border-rule transition-[width] duration-200 lg:block",
           collapsed ? "w-14" : "w-[216px]",
         )}
       >

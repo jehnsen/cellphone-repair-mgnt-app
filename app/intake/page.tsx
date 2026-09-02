@@ -394,7 +394,7 @@ export default function IntakePage() {
                         onClick={() => toggle(problemTags, tag, setProblemTags)}
                         aria-pressed={active}
                         className={cn(
-                          "tap rounded-full border px-3 text-xs font-medium transition-colors",
+                          "tap rounded-sm border px-3 text-xs font-medium transition-colors",
                           active
                             ? "border-bench bg-bench-fill text-bench-ink"
                             : "border-rule bg-copy text-ink-soft hover:bg-secondary",

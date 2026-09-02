@@ -50,26 +50,37 @@ export function LoginView() {
     }
   };
 
-  const shopName = db.shop.name || "Nelson Cellphone & Computer Repair Shop";
+  const shopName = db.shop.name || "";
 
   return (
-    <div className="min-h-dvh bg-paper lg:grid lg:grid-cols-[1.1fr_1fr]">
+    <div className="min-h-dvh lg:grid lg:grid-cols-[1.1fr_1fr]">
       {/* Brand side. Hidden on phones, where it would only push the form down.
           Deliberately dark in BOTH themes, so it is pinned to literal values
           rather than --ink/--paper, which swap between light and dark. */}
-      <aside className="relative hidden overflow-hidden bg-[#0b0f17] px-10 py-12 text-white lg:flex lg:flex-col xl:px-14">
-        {/* The panel is dressed as a workbench, not a product hero: the graph
-            paper a tech sketches a board layout on, copper traces routed
-            across it, and one warm pool of light from the bench lamp. All
-            pinned to literal values — this panel is dark in both themes, so
-            --ink/--paper would invert it. */}
+      <aside className="relative hidden overflow-hidden bg-[#05070f] px-10 py-12 text-white lg:flex lg:flex-col xl:px-14">
+        {/* The panel is dressed as the inside of a device: a fine board grid,
+            traces routed across it in the accent hues, and two cool pools of
+            light where a screen would be. All pinned to literal values —
+            this panel is dark in both themes, so --ink/--paper would invert
+            it, and the accent tokens shift between them. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.05]"
+          className="pointer-events-none absolute inset-0 opacity-[0.055]"
           style={{
             backgroundImage:
               "linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)",
-            backgroundSize: "26px 26px",
+            backgroundSize: "22px 22px",
+          }}
+        />
+
+        {/* Scanlines. Two pixels on, two off, at 4% — enough to read as a
+            driven display under the traces, not enough to moire the text. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(180deg, #ffffff 0 1px, transparent 1px 3px)",
           }}
         />
 
@@ -79,7 +90,7 @@ export function LoginView() {
           preserveAspectRatio="xMidYMid slice"
           className="pointer-events-none absolute inset-0 h-full w-full"
         >
-          <g fill="none" stroke="#e0a860" strokeOpacity="0.14" strokeWidth="1.5">
+          <g fill="none" stroke="#22d3ee" strokeOpacity="0.16" strokeWidth="1.5">
             <path d="M-10 92 H120 q14 0 14 14 V210 q0 14 14 14 H330" />
             <path d="M46 -10 V60 q0 14 14 14 H210 q14 0 14 14 V186" />
             <path d="M410 150 H300 q-14 0 -14 14 V300 q0 14 -14 14 H150 q-14 0 -14 14 V438" />
@@ -87,7 +98,7 @@ export function LoginView() {
             <path d="M120 630 V520 q0 -14 14 -14 H300 q14 0 14 -14 V360 H410" />
             <path d="M256 630 V560 q0 -14 14 -14 H410" />
           </g>
-          <g fill="#e0a860" fillOpacity="0.22">
+          <g fill="#22d3ee" fillOpacity="0.3">
             <circle cx="330" cy="224" r="3.5" />
             <circle cx="60" cy="74" r="3.5" />
             <circle cx="150" cy="438" r="3.5" />
@@ -96,13 +107,22 @@ export function LoginView() {
           </g>
         </svg>
 
-        {/* Bench lamp: a warm, off-centre pool of light, not a cold product glow. */}
+        {/* Two pools of screen light: indigo high and left, cyan low and
+            right, so the panel reads as lit hardware rather than a flat fill. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-28 -top-32 size-[30rem] rounded-full blur-3xl"
+          className="pointer-events-none absolute -right-28 -top-36 size-[34rem] rounded-full blur-3xl"
           style={{
             background:
-              "radial-gradient(circle, rgba(255,180,102,0.16), rgba(255,180,102,0) 70%)",
+              "radial-gradient(circle, rgba(99,102,241,0.34), rgba(99,102,241,0) 70%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-40 -left-24 size-[30rem] rounded-full blur-3xl"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(34,211,238,0.18), rgba(34,211,238,0) 70%)",
           }}
         />
         {/* Floor shadow, so the copy at the bottom keeps its contrast. */}
@@ -111,19 +131,19 @@ export function LoginView() {
           className="pointer-events-none absolute inset-x-0 bottom-0 h-56"
           style={{
             background:
-              "linear-gradient(to top, rgba(3,5,10,0.85), rgba(3,5,10,0))",
+              "linear-gradient(to top, rgba(3,5,10,0.9), rgba(3,5,10,0))",
           }}
         />
 
         <div className="relative flex items-center gap-2.5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-bench text-white shadow-raised">
+          <span className="brandmark grid size-9 shrink-0 place-items-center rounded-sm shadow-glow">
             <Wrench className="size-4.5" aria-hidden />
           </span>
           <span className="label-bin text-white/90">NCC Repair Shop</span>
         </div>
 
         <div className="relative my-auto max-w-md py-10">
-          <h2 className="font-display text-4xl font-semibold leading-[1.1] tracking-[-0.02em] text-white xl:text-5xl">
+          <h2 className="font-display text-4xl font-semibold leading-[1.1] tracking-[-0.03em] text-white xl:text-5xl">
             {shopName}
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-white/70">
@@ -131,14 +151,20 @@ export function LoginView() {
             record per job, from the moment it lands on the counter.
           </p>
 
-          <ul className="mt-8 space-y-3">
+          <ul className="mt-8 space-y-2.5">
             {[
               { icon: ClipboardCheck, text: "Job orders with a printable claim stub" },
               { icon: Smartphone, text: "Handsets tracked one IMEI at a time" },
               { icon: ShieldCheck, text: "Warranty and balance settled at release" },
-            ].map((row) => (
-              <li key={row.text} className="flex items-center gap-3">
-                <span className="grid size-7 shrink-0 place-items-center rounded-md bg-white/10">
+            ].map((row, index) => (
+              <li
+                key={row.text}
+                className="flex items-center gap-3 border-l border-white/10 pl-3"
+              >
+                <span className="mono text-[0.625rem] tabular-nums text-cyan-300/70">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="grid size-7 shrink-0 place-items-center rounded-sm border border-white/10 bg-white/[0.07]">
                   <row.icon className="size-3.5 text-white/80" aria-hidden />
                 </span>
                 <span className="text-sm text-white/80">{row.text}</span>
@@ -147,19 +173,26 @@ export function LoginView() {
           </ul>
         </div>
 
-        {db.shop.city ? (
-          <p className="relative text-xs text-white/40">{db.shop.city}</p>
-        ) : null}
+        <div className="relative flex items-center gap-2">
+          <span
+            className="size-1.5 shrink-0 bg-cyan-300"
+            style={{ boxShadow: "0 0 8px 0 rgba(34,211,238,0.9)" }}
+            aria-hidden
+          />
+          <p className="label-pad text-white/45">
+            {db.shop.city ? `${db.shop.city} · ready` : "Ready"}
+          </p>
+        </div>
       </aside>
 
       {/* Sign-in side. */}
       <main className="flex min-h-dvh flex-col justify-center px-5 py-10 sm:px-10 lg:min-h-0">
         <div className="mx-auto w-full max-w-104">
-          {/* Wordmark. Shown at every width: on desktop the workbench panel
+          {/* Wordmark. Shown at every width: on desktop the brand panel
               carries the name too, but the form still needs its own mark so
               it is not anonymous; on phones the panel is hidden entirely. */}
           <div className="flex items-center gap-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-bench text-white shadow-raised">
+            <span className="brandmark grid size-9 shrink-0 place-items-center rounded-sm shadow-glow">
               <Wrench className="size-4.5" aria-hidden />
             </span>
             <span className="label-bin text-ink">{shopName}</span>
@@ -178,7 +211,7 @@ export function LoginView() {
               event.preventDefault();
               void submit();
             }}
-            className="mt-7 space-y-4 rounded-lg border border-rule bg-copy p-5 shadow-raised sm:p-6"
+            className="brackets relative mt-7 space-y-4 rounded-sm border border-rule bg-copy p-5 shadow-float sm:p-6"
           >
             <div className="space-y-1.5">
               <Label htmlFor="email" className="label-pad">

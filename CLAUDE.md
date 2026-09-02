@@ -102,9 +102,12 @@ object in `lib/api/shop-api.ts`:
   complete. Whatever the API has not built yet **reads empty and writes throw**
   `NOT_IMPLEMENTED` naming the missing endpoint. It never invents a row.
 
-`lib/api/config.ts` lists what is still missing in `PENDING_CONTEXTS`, and the
-Settings screen shows that list to the user. Keep it honest when an endpoint
-ships. `README.md` has the four-step "wiring up a new endpoint" recipe.
+`lib/api/config.ts` lists what is still missing in `PENDING_CONTEXTS`. Keep it
+honest when an endpoint ships — but note it is **no longer rendered anywhere**:
+`DataSourceNotice` was the only thing that read it, and it was dropped from the
+day sheet, so the list is now for this repo's readers rather than for the shop.
+Surface it again (Settings → Connection is the natural home, beside the API URL
+and the signed-in user) if it should be user-visible. `README.md` has the four-step "wiring up a new endpoint" recipe.
 
 - **`http.ts`** — the only place that knows about HTTP: bearer token, the
   `{data, meta, links}` envelope, `Idempotency-Key` on writes, `getAll()` to page
@@ -327,14 +330,64 @@ as a real figure.
 Tailwind v4, tokens in `app/globals.css`, shadcn/ui in `components/ui/`
 (restyled onto the shop palette — check before assuming stock behaviour).
 
+The look is **instrument panel, not stationery**: indigo into cyan, deep
+blue-black at night, a 4px machined corner on everything, and light — a sheen
+on filled controls, a glow under the primary action, glass under the fixed
+chrome. The canvas carries a fixed 32px reference grid (`--grad-ambient`,
+struck in `--rule-line`) under two pools of brand light, which is what makes a
+page of panels read as a chassis rather than a spreadsheet.
+
+Type is Space Grotesk (display and figures), Inter (body), JetBrains Mono —
+which also sets **every micro label**: `.label-pad` and `.label-bin` are mono,
+because a legend in the same face as the identifiers below it reads as machine
+legend rather than as small copy.
+
 Components use **semantic tokens, never raw hex**: `bg-copy`, `text-ink`,
 `border-rule`, plus `bench` (primary), `stamp` (danger/overdue), `flag`
 (warning/due-soon), each with `-ink` (text-safe) and `-fill` (tinted bg)
 variants. `--radius` and the shadow scale drive the whole look; changing a token
 propagates everywhere, which is the point.
 
-Two rules the existing code follows deliberately:
+Helpers in `globals.css` carry the dress, so nobody re-mixes it by hand:
+`.brandmark` (a tile filled with `--grad-accent`), `.rule-accent` (that gradient
+as a lit hairline — the rail's active edge, the strip's top rule), `.glass` (the
+shift strip and the phone tab bar, solid where `backdrop-filter` is missing),
+and `.sheen` (the light-from-above on filled buttons).
 
+Four more carry the machined read — spend them on surfaces that carry a
+reading, not on every box. They are laid out live under **Machined detail** on
+`/specimen`:
+
+- **`.notch`** — a keyed corner, sized by `--notch`. `clip-path` takes the
+  border along the diagonal *and the box shadow* with it, so the class lays a
+  hairline back down the cut from `--notch-edge` (set it to match the border,
+  or to `transparent` on a gradient plate) and the element gets its elevation
+  from its border, never from `shadow-*`. It cannot be combined with
+  `.brackets` — both want `::after`.
+- **`.brackets`** — an instrument bezel in `::before`/`::after`, which is how a
+  Panel gets corner ticks *and* keeps its shadow. Needs `relative`.
+- **`.graduated`** — the tick scale beside a reading; a 3px strip, never a
+  border.
+- **The indicator lamp** — a lit `size-1.5` square of `--bench`. `PanelTitle`
+  puts one before every legend; the login panel's is cyan, pinned literal.
+
+Note `body` sets `font-family: var(--font-body)`, **not** `var(--font-sans)` —
+`--font-sans` lives in `@theme inline`, which inlines values into utilities
+rather than emitting the custom property, so the `var()` resolved to nothing and
+body copy silently fell back to the system stack.
+
+Three rules the existing code follows deliberately:
+
+- **`--surge` (the cyan) is brand, never status.** It appears in the gradient —
+  the mark, the lit edge, the login panel — and nowhere as a fill under text.
+- **`--go` (the green) is transient feedback, never a surface.** It exists so a
+  toast can say an action worked; it must not appear on a board card, a tag, or
+  a table row, where hue already means lateness. Toasts are colour-coded by
+  type in `components/ui/sonner.tsx` — `richColors` is what enables the tint at
+  all, and each `--success/error/warning/info-*` var is re-pointed at `go` /
+  `stamp` / `flag` / `bench`. Green against red is the one pair colour-blind
+  users cannot separate, so every type also carries its own icon shape. Fire
+  all four from the Toasts row on `/specimen`.
 - **Colour is spent on urgency, not status.** Status is carried by column
   position, a two-letter mono code, and fill weight. `AgingStrip` is the one
   element allowed to carry hue for lateness.
@@ -346,7 +399,8 @@ Two rules the existing code follows deliberately:
 
 Anything intentionally dark in both themes (the login brand panel) must be
 pinned to literal values — `--ink`/`--paper` swap with the theme and will invert
-it.
+it. That panel's circuit traces and its two pools of screen light are literal
+`#22d3ee` / `rgba(99,102,241,…)` for exactly this reason.
 
 ## Verifying UI work
 

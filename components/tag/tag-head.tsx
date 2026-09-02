@@ -38,7 +38,7 @@ export function TagHead({
   return (
     <div
       className={cn(
-        "relative flex overflow-hidden rounded-lg border border-rule bg-copy shadow-raised",
+        "relative flex overflow-hidden rounded-sm border border-rule bg-copy shadow-raised",
         className,
       )}
     >

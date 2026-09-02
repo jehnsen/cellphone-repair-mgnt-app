@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { BookOpen, PanelLeftClose, PanelLeftOpen, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV, type NavItem } from "@/components/shell/nav";
 import { useShop } from "@/lib/shop/store";
@@ -22,9 +22,10 @@ interface NavRailProps {
 }
 
 /**
- * Text-label rail, set like the divider tabs of a filing cabinet. Icons are
- * secondary at full width — under fluorescent light a word is faster than a
- * glyph — and only take over when the rail collapses on a narrow laptop.
+ * The rail. Labels lead at full width — under fluorescent light a word is
+ * faster than a glyph — and icons take over when it collapses on a narrow
+ * laptop. The active row is a filled pill with a gradient marker down its
+ * left edge, which is the one place navigation is allowed to carry the brand.
  */
 export function NavRail({
   counts,
@@ -54,16 +55,23 @@ export function NavRail({
           title={db.shop.name}
         >
           {collapsed ? (
-            <span className="mono grid size-8 place-items-center rounded-lg bg-bench text-[0.6875rem] font-semibold text-white">
+            <span className="brandmark notch [--notch-edge:transparent] mono grid size-9 place-items-center text-[0.6875rem] font-semibold">
               JO
             </span>
           ) : (
-            <>
-              {/* <span className="label-pad block text-[0.625rem]">Job order</span> */}
-              <span className="mt-0.5 block truncate font-display text-sm font-semibold leading-tight tracking-[-0.008em] text-ink">
-                {db.shop.name || "Repair shop"}
+            <span className="flex items-center gap-2.5">
+              <span className="brandmark notch [--notch-edge:transparent] grid size-9 shrink-0 place-items-center">
+                <Wrench className="size-4.5" aria-hidden />
               </span>
-            </>
+              <span className="min-w-0">
+                <span className="block truncate font-display text-sm font-semibold leading-tight tracking-[-0.02em] text-ink">
+                  {db.shop.name || "Repair shop"}
+                </span>
+                <span className="label-pad block text-[0.5625rem] text-ink-faint">
+                  Repair &amp; retail
+                </span>
+              </span>
+            </span>
           )}
         </Link>
       </div>
@@ -80,13 +88,13 @@ export function NavRail({
               {collapsed ? (
                 <div className="mx-auto mb-1.5 h-px w-6 bg-rule" aria-hidden />
               ) : (
-                <div className="flex items-center gap-2 px-3 pb-1.5">
+                <div className="flex items-center gap-2 px-3 pb-1">
                   <span className="label-pad">{section.title}</span>
-                  <span className="h-px flex-1 bg-rule" aria-hidden />
+                  <span className="graduated h-[3px] flex-1 opacity-70" aria-hidden />
                 </div>
               )}
 
-              <ul className={cn("space-y-px", collapsed && "space-y-1 px-2")}>
+              <ul className={cn("space-y-0.5 px-2", collapsed && "space-y-1")}>
                 {items.map((item) => (
                   <li key={item.href}>
                     <RailLink
@@ -104,7 +112,7 @@ export function NavRail({
         })}
       </div>
 
-      <div className={cn("border-t border-rule/70 px-3 pt-2", collapsed && "px-2")}>
+      <div className={cn("border-t border-rule/70 px-2 pt-2", collapsed && "px-2")}>
         <HelpLink
           active={pathname.startsWith("/help")}
           collapsed={collapsed}
@@ -161,7 +169,7 @@ function HelpLink({
         "flex w-full items-center gap-2 rounded-sm border px-2 py-1.5 text-xs transition-colors",
         collapsed && "justify-center px-0",
         active
-          ? "border-rule bg-copy font-medium text-ink"
+          ? "border-rule bg-copy font-medium text-ink shadow-panel"
           : "border-transparent text-ink-soft hover:border-rule hover:bg-copy hover:text-ink",
       )}
     >
@@ -208,26 +216,21 @@ function RailLink({
         "group relative flex items-center gap-2.5 text-sm transition-colors",
         collapsed
           ? "h-10 justify-center rounded-sm"
-          : "tap border-l-[3px] py-2 pl-[13px] pr-3",
+          : "tap rounded-sm py-2 pl-3 pr-2.5",
         active
-          ? collapsed
-            ? "bg-copy font-semibold text-ink shadow-panel ring-1 ring-rule"
-            : "border-l-bench bg-copy font-semibold text-ink"
-          : collapsed
-            ? "text-ink-soft hover:bg-copy/70 hover:text-ink"
-            : "border-l-transparent text-ink-soft hover:bg-copy/60 hover:text-ink",
+          ? "bg-bench-fill font-semibold text-bench-ink shadow-panel ring-1 ring-bench/25"
+          : "text-ink-soft hover:bg-copy hover:text-ink",
       )}
     >
-      {active && collapsed ? (
-        <span
-          className="absolute inset-y-1 left-0 w-[3px] bg-bench"
-          aria-hidden
-        />
+      {/* The lit edge. Gradient rather than a flat rule, and the only brand
+          colour in the rail besides the mark at the top. */}
+      {active ? (
+        <span className="rule-accent absolute inset-y-0 left-0 w-[3px]" aria-hidden />
       ) : null}
       <Icon
         className={cn(
-          "size-4 shrink-0",
-          active ? "text-bench" : "text-ink-faint group-hover:text-ink-soft",
+          "size-4 shrink-0 transition-colors",
+          active ? "text-bench" : "text-ink-faint group-hover:text-bench",
         )}
         aria-hidden
       />
@@ -241,8 +244,8 @@ function RailLink({
           className={cn(
             "mono text-center text-[0.6875rem] font-semibold leading-5",
             collapsed
-              ? "absolute -right-0.5 -top-0.5 min-w-4 rounded-full px-1 text-[0.625rem] leading-4"
-              : "min-w-5 rounded-sm px-1",
+              ? "absolute -right-0.5 -top-0.5 min-w-4 rounded-sm px-1 text-[0.625rem] leading-4"
+              : "min-w-5 rounded-sm px-1.5",
             item.badge === "overdue"
               ? "bg-stamp text-white"
               : "bg-secondary text-ink-soft",

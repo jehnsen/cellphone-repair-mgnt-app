@@ -284,7 +284,7 @@ export function ReleaseView() {
             />
 
             {alreadyReleased ? (
-              <div className="flex items-start gap-3 rounded-lg border border-rule bg-secondary px-3 py-3 text-sm">
+              <div className="flex items-start gap-3 rounded-sm border border-rule bg-secondary px-3 py-3 text-sm">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
                 <div>
                   <p className="font-semibold text-ink">Already released.</p>
@@ -296,7 +296,7 @@ export function ReleaseView() {
                 </div>
               </div>
             ) : notReady ? (
-              <div className="flex items-start gap-3 rounded-lg border border-flag/40 bg-flag-fill px-3 py-3 text-sm">
+              <div className="flex items-start gap-3 rounded-sm border border-flag/40 bg-flag-fill px-3 py-3 text-sm">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-flag-ink" aria-hidden />
                 <div>
                   <p className="font-semibold text-flag-ink">
@@ -513,7 +513,7 @@ export function ReleaseView() {
               />
 
               {released.warranty ? (
-                <div className="rounded-lg border border-bench/30 bg-bench-fill p-3">
+                <div className="rounded-sm border border-bench/30 bg-bench-fill p-3">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="size-4 text-bench-ink" aria-hidden />
                     <p className="text-sm font-semibold text-bench-ink">
