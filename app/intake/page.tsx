@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomerPicker, type NewCustomerDraft } from "@/components/intake/customer-picker";
 import { TagHead } from "@/components/tag/tag-head";
@@ -143,7 +144,9 @@ export default function IntakePage() {
           : null;
 
   const hasCustomer = customer || (draft.name.trim() && draft.mobile.trim());
-  const hasDevice = brand.trim() && model.trim() && imei.trim().length > 0 && !imeiProblem;
+  /* IMEI / serial is optional — a dead unit that won't power on has no
+     readable one — but a value that is entered still has to be well-formed. */
+  const hasDevice = brand.trim() && model.trim() && !imeiProblem;
   const hasProblem = reportedProblem.trim().length > 0;
   const canSubmit = Boolean(hasCustomer && hasDevice && hasProblem && estimatedCost && !submitting);
 
@@ -273,7 +276,7 @@ export default function IntakePage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="imei">IMEI / serial</Label>
+                  <Label htmlFor="imei">IMEI / serial (optional)</Label>
                   <InputMono
                     id="imei"
                     value={imei}
@@ -292,38 +295,31 @@ export default function IntakePage() {
                     {imeiProblem ??
                       (looksLikeImei
                         ? "Checks out."
-                        : "Phones: dial *#06# on the unit. Laptops and watches: use the serial.")}
+                        : "Phones: dial *#06# on the unit. Laptops and watches: use the serial. Leave blank if the unit won't power on.")}
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Brand</Label>
-                  <Select value={brand} onValueChange={(v) => { setBrand(v); setModel(""); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select brand" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {brandModels.map((b) => (
-                        <SelectItem key={b} value={b}>
-                          {b}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="brand">Brand</Label>
+                  <Combobox
+                    id="brand"
+                    value={brand}
+                    onChange={(v) => { setBrand(v); setModel(""); }}
+                    options={brandModels}
+                    placeholder="Select or type a brand"
+                    emptyHint="No brand yet — type one to add it."
+                  />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Model</Label>
-                  <Select value={model} onValueChange={setModel} disabled={!brand}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={brand ? "Select model" : "Pick a brand first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modelsForBrand.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="model">Model</Label>
+                  <Combobox
+                    id="model"
+                    value={model}
+                    onChange={setModel}
+                    options={modelsForBrand}
+                    disabled={!brand}
+                    placeholder={brand ? "Select or type a model" : "Pick a brand first"}
+                    emptyHint="No model on file for this brand — type one to add it."
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="color">Color</Label>
@@ -542,7 +538,7 @@ export default function IntakePage() {
               </Button>
               {!hasCustomer || !hasDevice || !hasProblem || !estimatedCost ? (
                 <p className="text-center text-xs text-ink-faint">
-                  Customer, device with an IMEI or serial, reported problem, and an
+                  Customer, device brand and model, reported problem, and an
                   estimate are required.
                 </p>
               ) : null}

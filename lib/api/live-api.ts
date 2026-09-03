@@ -275,9 +275,14 @@ export function createLiveApi(
     const devices = await client.get<CustomerDeviceDto[]>(
       `/customers/${customerUlid}/devices`,
     );
-    const match = devices.data?.find(
-      (device) => (device.imei ?? "").replace(/\D/g, "") === clean,
-    );
+    /* Only an identifier we actually have can match an existing unit — an
+       empty one would collide with every prior device the customer took in
+       without an IMEI, and reuse the wrong record. */
+    const match = clean
+      ? devices.data?.find(
+          (device) => (device.imei ?? "").replace(/\D/g, "") === clean,
+        )
+      : undefined;
     if (match) return match.ulid;
 
     const created = await client.post<CustomerDeviceDto>(

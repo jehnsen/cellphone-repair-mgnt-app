@@ -275,6 +275,139 @@ export interface RevenueSplit {
   accessory: number;
 }
 
+/* ── The four counter-finance reports ────────────────────────────────────
+   Each server payload is the house shape `{ data: { aggregate, rows },
+   meta: { generated_at } }`, money as fixed 2-decimal strings, and is
+   branch-scoped through the same `?branch=` param every other GET carries.
+   `num()` in `live-reports.ts` coerces the strings; percentages here are
+   fractions (0–1), derived from the two authoritative figures rather than
+   read off the wire. */
+
+/**
+ * Repair P&L — closes the hole that repair-ticket payments never become
+ * Sales, so repair labour and parts were invisible in the margin report.
+ * Revenue is recognised at release. `paymentsCollected` is the cash actually
+ * taken on those tickets: earned vs collected.
+ */
+export interface RepairPnl {
+  partsRevenue: number;
+  laborRevenue: number;
+  totalRevenue: number;
+  /** From `ticket_lines.quantity × unit_cost`. */
+  partsCost: number;
+  partsMargin: number;
+  grossMargin: number;
+  /** `grossMargin / totalRevenue`, as a fraction. */
+  grossMarginPct: number;
+  paymentsCollected: number;
+  generatedAt: string;
+  /** One row per technician who released work in the window. */
+  byTechnician: {
+    technician: string;
+    partsRevenue: number;
+    laborRevenue: number;
+    totalRevenue: number;
+    partsCost: number;
+    grossMargin: number;
+    grossMarginPct: number;
+    paymentsCollected: number;
+  }[];
+}
+
+/** A tender method → amount map. The server rolls up all seven methods; the
+ *  keys are whatever it returns, so a new method needs no code change here. */
+export type TenderTotals = Record<string, number>;
+
+export interface CashReconciliationShift {
+  shiftId: string;
+  shiftNo: string;
+  branch: string;
+  cashier: string;
+  openedAt: string;
+  closedAt: string;
+  /** An open shift carries a *live* `expectedCash`; counted and variance are null. */
+  open: boolean;
+  openingFloat: number;
+  cashPayments: number;
+  cashIn: number;
+  cashOut: number;
+  /** `openingFloat + cashPayments + cashIn − cashOut`, the server's own formula. */
+  expectedCash: number;
+  countedCash: number | null;
+  variance: number | null;
+  tenderBreakdown: TenderTotals;
+}
+
+/**
+ * Cash reconciliation / Z-report — one row per shift opened in the window.
+ */
+export interface CashReconciliation {
+  tenderTotals: TenderTotals;
+  varianceTotal: number;
+  expectedTotal: number;
+  countedTotal: number;
+  openShiftCount: number;
+  generatedAt: string;
+  shifts: CashReconciliationShift[];
+}
+
+/**
+ * Refunds & voids — the leakage the sales report actively hides (it filters
+ * `status != voided`). Refunds dated by `refunds.created_at`, voids by the
+ * sale's `updated_at` (a void has no timestamp of its own).
+ */
+export interface RefundsVoids {
+  refundTotal: number;
+  refundCount: number;
+  refundByMethod: { key: string; amount: number; count: number }[];
+  refundByReason: { key: string; amount: number; count: number }[];
+  voidCount: number;
+  voidTotal: number;
+  generatedAt: string;
+  refunds: {
+    id: string;
+    saleNo: string;
+    at: string;
+    amount: number;
+    method: string;
+    reason: string;
+    processor: string;
+  }[];
+  voids: {
+    id: string;
+    saleNo: string;
+    at: string;
+    amount: number;
+    voidReason: string;
+    processor: string;
+  }[];
+}
+
+export type AgingBucket = "0-30" | "31-60" | "61-90" | "90+";
+
+/**
+ * Receivables aging — every repair ticket still carrying `balance > 0`,
+ * bucketed by age. The clock starts at the release-event date, falling back
+ * to `promised_date`, then intake; `agingBasis` names which was used.
+ * A snapshot as of now — no date window.
+ */
+export interface ReceivablesAging {
+  totalOutstanding: number;
+  generatedAt: string;
+  buckets: { bucket: AgingBucket; count: number; amount: number }[];
+  rows: {
+    ticketId: string;
+    ticketNo: string;
+    customerName: string;
+    device: string;
+    branch: string;
+    balance: number;
+    daysOutstanding: number;
+    bucket: AgingBucket;
+    agingBasis: string;
+  }[];
+}
+
 export interface ShopReports {
   getSalesReport(range?: ReportRange): Promise<{
     grossSales: number;
@@ -329,6 +462,15 @@ export interface ShopReports {
       balance: number;
     }[]
   >;
+
+  /* ── Counter finance ──────────────────────────────────────────────
+     Repair P&L needs `reports.view` + `reports.margin.view`; the other
+     three need `reports.view`. All but receivables aging take a date
+     window (default 30 days). */
+  getRepairPnl(range?: ReportRange): Promise<RepairPnl>;
+  getCashReconciliation(range?: ReportRange): Promise<CashReconciliation>;
+  getRefundsVoids(range?: ReportRange): Promise<RefundsVoids>;
+  getReceivablesAging(): Promise<ReceivablesAging>;
 }
 
 /** Everything a screen can ask of the shop. A fetch client implements this. */
