@@ -7,6 +7,7 @@ import {
   ScanBarcode,
   Settings2,
   Sheet,
+  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/inventory", label: "Inventory", icon: Boxes, permission: "inventory.view", badge: "lowStock" },
       { href: "/customers", label: "Customers", icon: Users, permission: null },
+      { href: "/warranties", label: "Warranties", icon: ShieldCheck, permission: "sales_warranty.view" },
     ],
   },
   {

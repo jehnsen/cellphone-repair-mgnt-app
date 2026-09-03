@@ -1,4 +1,15 @@
-import type { Database, ID, ItemClass, TicketStatus } from "@/lib/types";
+import type {
+  ClaimHandling,
+  ClaimResolution,
+  ClaimStatus,
+  Database,
+  ID,
+  ItemClass,
+  SaleWarrantyCoverage,
+  SupplierReturnReason,
+  SupplierReturnStatus,
+  TicketStatus,
+} from "@/lib/types";
 
 /**
  * The shapes screens use to ask for a filtered list, and the two stock
@@ -40,6 +51,30 @@ export interface SaleQuery {
 
 export interface CustomerQuery {
   search?: string;
+}
+
+/* ── Sale-side warranty list filters ─────────────────────────────────────
+   These map straight to the API's spatie allow-lists; `page` is 1-based. */
+
+export interface WarrantyListQuery {
+  page?: number;
+  coverage?: SaleWarrantyCoverage;
+  /** `created_at` newest-first is the default; `expiry_date` sorts ascending. */
+  sort?: "-created_at" | "expiry_date";
+}
+
+export interface ClaimListQuery {
+  page?: number;
+  status?: ClaimStatus;
+  resolution?: ClaimResolution;
+  handling?: ClaimHandling;
+}
+
+export interface SupplierReturnListQuery {
+  page?: number;
+  status?: SupplierReturnStatus;
+  reason?: SupplierReturnReason;
+  sort?: "-created_at" | "sent_at";
 }
 
 /**

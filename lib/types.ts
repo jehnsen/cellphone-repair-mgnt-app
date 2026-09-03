@@ -36,7 +36,13 @@ export type Permission =
   | "settings.manage"
   | "users.manage"
   /** See more than one branch, and switch which one the app is pointed at. */
-  | "branch.switch";
+  | "branch.switch"
+  /* Sale-side warranty: the shop/manufacturer warranty a serialized unit
+     carries out the door, its claims, and shipping a defective unit back to
+     the vendor. Names mirror the server's Spatie permissions verbatim. */
+  | "sales_warranty.view"
+  | "sales_warranty.manage"
+  | "supplier_returns.manage";
 
 export interface User {
   id: ID;
@@ -448,6 +454,8 @@ export interface InventoryItem {
   reorderPoint: number;
   unitCost: number;
   sellingPrice: number;
+  /** Catalog default for the sale warranty issued when a unit sells. 0 = none. */
+  warrantyDays: number;
 
   /** handset only. */
   units?: HandsetUnit[];
@@ -596,6 +604,108 @@ export interface SaleReturn {
   at: ISODate;
   by: ID;
   note?: string;
+}
+
+/* ── Sale-side warranty ─────────────────────────────────────────────────
+   The shop or manufacturer warranty a serialized unit (phone/laptop)
+   carries out the door when it is sold — wholly separate from the
+   repair-ticket `WarrantySlip`. A customer availing one files a claim that
+   stays on the sales/CP-units side and never opens a job order; a factory
+   defect is shipped back to the vendor as a supplier return. */
+
+export type SaleWarrantyCoverage = "shop" | "manufacturer";
+
+/** Derived for display — the server does not send a status string. */
+export type SaleWarrantyStatus = "active" | "expired" | "voided";
+
+/** Enough of a serialized unit to draw a row without a second lookup. */
+export interface WarrantyUnitRef {
+  id: ID;
+  imei?: string;
+  serialNumber?: string;
+  condition: HandsetCondition;
+  status: HandsetUnitStatus | "returned_to_supplier";
+  productName: string;
+  /** Absent without `margin.view`. */
+  acquisitionCost?: number;
+}
+
+export interface SaleWarranty {
+  id: ID;
+  warrantyCode: string;
+  coverage: SaleWarrantyCoverage;
+  termDays: number;
+  startsAt: ISODate;
+  expiryDate: ISODate;
+  /** Server-computed: not voided and not past expiry. */
+  isActive: boolean;
+  voidedAt?: ISODate;
+  terms?: string;
+  exclusions?: string[];
+  saleId?: ID;
+  unit?: WarrantyUnitRef;
+  customer?: { id: ID; name: string };
+  /** Only on the detail read. */
+  claims?: SaleWarrantyClaim[];
+  createdAt: ISODate;
+}
+
+export type ClaimHandling = "separate" | "repair_board";
+export type ClaimStatus = "open" | "resolved" | "rejected";
+export type ClaimResolution =
+  | "repaired_in_house"
+  | "replaced"
+  | "returned_to_supplier"
+  | "refunded"
+  | "rejected";
+
+export interface SaleWarrantyClaim {
+  id: ID;
+  reportedDefect: string;
+  handling: ClaimHandling;
+  /** Stamped at filing from whether the warranty was active then. */
+  withinCoverage: boolean;
+  status: ClaimStatus;
+  resolution?: ClaimResolution;
+  outcomeNotes?: string;
+  repairTicketId?: ID;
+  warranty?: SaleWarranty;
+  unit?: WarrantyUnitRef;
+  supplierReturnId?: ID;
+  /** Only on the detail read. */
+  filedBy?: { id: ID; name: string };
+  resolvedAt?: ISODate;
+  createdAt: ISODate;
+}
+
+export type SupplierReturnReason =
+  | "factory_defect"
+  | "dead_on_arrival"
+  | "wrong_item"
+  | "other";
+export type SupplierReturnStatus =
+  | "sent"
+  | "replaced"
+  | "credited"
+  | "rejected"
+  | "closed";
+/** The terminal states a close() can land on. */
+export type SupplierReturnOutcome = "replaced" | "credited" | "rejected" | "closed";
+
+export interface SupplierReturn {
+  id: ID;
+  reason: SupplierReturnReason;
+  reasonNote?: string;
+  status: SupplierReturnStatus;
+  /** Absent without `margin.view`. */
+  creditAmount?: number;
+  sentAt: ISODate;
+  resolvedAt?: ISODate;
+  saleWarrantyClaimId?: ID;
+  supplier?: { id: ID; name: string };
+  unit?: WarrantyUnitRef;
+  replacementUnit?: WarrantyUnitRef;
+  createdAt: ISODate;
 }
 
 /* ── Cash drawer ────────────────────────────────────────────────────── */
@@ -773,10 +883,16 @@ export interface AppNotification {
   queuedAt: ISODate;
 }
 
-/** Shape every list accessor returns, so screens can render three states. */
+/**
+ * A page of a server-paginated list, plus the cursor a screen needs to draw
+ * Prev/Next. `page` is 1-based; `lastPage` is what the server reports.
+ */
 export interface Paged<T> {
   rows: T[];
   total: number;
+  page: number;
+  perPage: number;
+  lastPage: number;
 }
 
 /** The whole mock database, so a backend team can see the surface at once. */

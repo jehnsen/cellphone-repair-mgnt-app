@@ -509,6 +509,7 @@ export function toInventoryItem(dto: ProductDto): InventoryItem {
     /* `cost` is permission-gated server-side: absent for a cashier. */
     unitCost: num(dto.cost),
     sellingPrice: num(dto.selling_price),
+    warrantyDays: dto.warranty_days ?? 0,
     units: itemClass === "handset" ? [] : undefined,
     compatibleModels:
       itemClass === "spare_part"

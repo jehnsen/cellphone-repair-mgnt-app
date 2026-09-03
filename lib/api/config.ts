@@ -20,7 +20,7 @@ export const STORAGE = {
 /** Endpoints that do not exist yet, named where the user can see them. */
 export const PENDING_CONTEXTS = [
   "Standalone ticket notes without a status change",
-  "Warranty slips and warranty claim tickets",
+  "Repair-ticket warranty slips (the sale-side warranty is live under Warranties)",
   "The Viber/SMS outbox (message templates are live under Settings)",
   "Buy-back / trade-in acquisitions (create, IMEI check, complete) — POS can spend a completed acquisition as tender, but not create one here",
   "Sales filtered by customer, so a customer's purchases show only the recent ones held in the cache",

@@ -294,6 +294,15 @@ export function createCommerceApi(
             discount: line.discount
               ? { type: line.discount.kind, value: line.discount.value }
               : undefined,
+            /* Only sent when the cashier overrode the counter warranty; left
+               off, the server issues from the product's catalog default. */
+            ...(line.warranty
+              ? {
+                  warranty_days: line.warranty.days,
+                  warranty_coverage: line.warranty.coverage,
+                  warranty_terms: line.warranty.terms || undefined,
+                }
+              : {}),
           };
         }
         if (line.kind === "service" && line.itemId) {

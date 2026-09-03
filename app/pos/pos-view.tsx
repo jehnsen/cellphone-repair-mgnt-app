@@ -6,6 +6,7 @@ import {
   BadgePercent,
   Banknote,
   CheckCircle2,
+  ChevronDown,
   Lock,
   LogOut,
   Minus,
@@ -14,6 +15,7 @@ import {
   Repeat,
   ScanBarcode,
   Search,
+  ShieldCheck,
   Trash2,
   Wallet,
   Wrench,
@@ -37,11 +39,13 @@ import { computeTax } from "@/lib/vat";
 import { formatDateTime, money, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { NewSaleInput } from "@/lib/shop/contract";
+import { COVERAGE_LABEL } from "@/lib/warranty";
 import type {
   InventoryItem,
   PaymentMethod,
   Sale,
   SaleLineKind,
+  SaleWarrantyCoverage,
   ServiceItem,
   Shift,
 } from "@/lib/types";
@@ -59,6 +63,14 @@ interface CartLine {
   /** Handsets and services are single-quantity by nature. */
   fixedQuantity: boolean;
   maxQuantity?: number;
+  /** handset only: the product's catalog warranty term, for the panel default. */
+  catalogWarrantyDays?: number;
+  /**
+   * handset only: a cashier override of the shop warranty issued at checkout.
+   * Left `undefined`, the sale omits the fields and the server issues from the
+   * product's catalog default.
+   */
+  warranty?: { days: number; coverage: SaleWarrantyCoverage; terms?: string };
 }
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
@@ -68,6 +80,14 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "card", label: "Card" },
   { value: "bank_transfer", label: "Bank" },
 ];
+
+/** "1-year" / "90-day" / "no" — the warranty term read on a cart line. */
+function describeTerm(days: number): string {
+  if (days <= 0) return "no";
+  if (days % 365 === 0) return `${days / 365}-year`;
+  if (days % 30 === 0) return `${days / 30}-month`;
+  return `${days}-day`;
+}
 
 export function PosView() {
   const { db, user } = useShop();
@@ -154,6 +174,7 @@ export function PosView() {
           unitPrice: unit.price,
           unitCost: unit.cost,
           fixedQuantity: true,
+          catalogWarrantyDays: item.warrantyDays,
         },
       ]);
     } else {
@@ -241,6 +262,37 @@ export function PosView() {
   const removeLine = (key: string) =>
     setCart((prev) => prev.filter((line) => line.key !== key));
 
+  /* Which handset lines have their warranty panel open, and the cashier's
+     override of the shop warranty issued at checkout. */
+  const [warrantyOpen, setWarrantyOpen] = useState<Set<string>>(new Set());
+  const toggleWarranty = (key: string) =>
+    setWarrantyOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const setLineWarranty = (
+    key: string,
+    patch: Partial<NonNullable<CartLine["warranty"]>>,
+  ) =>
+    setCart((prev) =>
+      prev.map((line) => {
+        if (line.key !== key) return line;
+        const base = line.warranty ?? {
+          days: line.catalogWarrantyDays ?? 0,
+          coverage: "shop" as SaleWarrantyCoverage,
+        };
+        return { ...line, warranty: { ...base, ...patch } };
+      }),
+    );
+  const resetLineWarranty = (key: string) =>
+    setCart((prev) =>
+      prev.map((line) =>
+        line.key === key ? { ...line, warranty: undefined } : line,
+      ),
+    );
+
   const subtotal = useMemo(
     () => cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [cart],
@@ -304,6 +356,7 @@ export function PosView() {
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         unitCost: line.unitCost,
+        warranty: line.kind === "handset" ? line.warranty : undefined,
       })),
       seniorPwd: seniorPwd
         ? {
@@ -509,50 +562,62 @@ export function PosView() {
             ) : (
               <ul className="divide-y divide-rule-soft">
                 {cart.map((line) => (
-                  <li key={line.key} className="flex items-center gap-3 px-3 py-2 sm:px-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-ink">{line.name}</p>
-                      <p className="mono text-xs text-ink-faint">
-                        {line.sku} · {peso(line.unitPrice)}
-                      </p>
+                  <li key={line.key} className="px-3 py-2 sm:px-4">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-ink">{line.name}</p>
+                        <p className="mono text-xs text-ink-faint">
+                          {line.sku} · {peso(line.unitPrice)}
+                        </p>
+                      </div>
+
+                      {line.fixedQuantity ? (
+                        <span className="mono text-xs text-ink-soft">×1</span>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon-xs"
+                            onClick={() => setQuantity(line.key, -1)}
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus aria-hidden />
+                          </Button>
+                          <span className="mono w-6 text-center text-sm">{line.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="icon-xs"
+                            onClick={() => setQuantity(line.key, 1)}
+                            aria-label="Increase quantity"
+                          >
+                            <Plus aria-hidden />
+                          </Button>
+                        </div>
+                      )}
+
+                      <span className="mono w-24 text-right text-sm font-semibold text-ink">
+                        {peso(line.unitPrice * line.quantity)}
+                      </span>
+
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => removeLine(line.key)}
+                        aria-label={`Remove ${line.name}`}
+                      >
+                        <Trash2 aria-hidden />
+                      </Button>
                     </div>
 
-                    {line.fixedQuantity ? (
-                      <span className="mono text-xs text-ink-soft">×1</span>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon-xs"
-                          onClick={() => setQuantity(line.key, -1)}
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus aria-hidden />
-                        </Button>
-                        <span className="mono w-6 text-center text-sm">{line.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon-xs"
-                          onClick={() => setQuantity(line.key, 1)}
-                          aria-label="Increase quantity"
-                        >
-                          <Plus aria-hidden />
-                        </Button>
-                      </div>
-                    )}
-
-                    <span className="mono w-24 text-right text-sm font-semibold text-ink">
-                      {peso(line.unitPrice * line.quantity)}
-                    </span>
-
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => removeLine(line.key)}
-                      aria-label={`Remove ${line.name}`}
-                    >
-                      <Trash2 aria-hidden />
-                    </Button>
+                    {line.kind === "handset" ? (
+                      <WarrantyLinePanel
+                        line={line}
+                        open={warrantyOpen.has(line.key)}
+                        onToggle={() => toggleWarranty(line.key)}
+                        onChange={(patch) => setLineWarranty(line.key, patch)}
+                        onReset={() => resetLineWarranty(line.key)}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -811,6 +876,8 @@ export function PosView() {
                 ) : null}
               </div>
 
+              <IssuedWarranties saleId={completed.id} />
+
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1">
                   <span className="label-pad">Roll</span>
@@ -884,6 +951,165 @@ export function PosView() {
           onDone={refetchShift}
         />
       ) : null}
+    </div>
+  );
+}
+
+/* ── Per-line sale warranty ──────────────────────────────────────────── */
+
+function WarrantyLinePanel({
+  line,
+  open,
+  onToggle,
+  onChange,
+  onReset,
+}: {
+  line: CartLine;
+  open: boolean;
+  onToggle: () => void;
+  onChange: (patch: Partial<NonNullable<CartLine["warranty"]>>) => void;
+  onReset: () => void;
+}) {
+  const effectiveDays = line.warranty?.days ?? line.catalogWarrantyDays ?? 0;
+  const effectiveCoverage = line.warranty?.coverage ?? "shop";
+  const overridden = line.warranty !== undefined;
+
+  const summary =
+    effectiveDays > 0
+      ? `${describeTerm(effectiveDays)} ${COVERAGE_LABEL[effectiveCoverage].toLowerCase()}`
+      : "No warranty issued";
+
+  return (
+    <div className="mt-1.5 rounded-sm border border-rule-soft bg-paper/60">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="tap flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+      >
+        <ShieldCheck className="size-3.5 shrink-0 text-ink-faint" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-soft">
+          {summary}
+          {overridden ? (
+            <span className="text-ink-faint"> · edited</span>
+          ) : (
+            <span className="text-ink-faint"> · catalog default</span>
+          )}
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 text-ink-faint transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open ? (
+        <div className="space-y-2 border-t border-rule-soft px-2.5 py-2">
+          <div className="flex gap-1" role="group" aria-label="Coverage">
+            {(["shop", "manufacturer"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onChange({ coverage: option })}
+                aria-pressed={effectiveCoverage === option}
+                className={cn(
+                  "tap rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                  effectiveCoverage === option
+                    ? "border-bench bg-bench-fill text-bench-ink"
+                    : "border-rule bg-copy text-ink-soft hover:bg-secondary",
+                )}
+              >
+                {option === "shop" ? "Shop" : "Manufacturer"}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label htmlFor={`wty-days-${line.key}`} className="label-pad">
+              Term (days)
+            </Label>
+            <InputMono
+              id={`wty-days-${line.key}`}
+              inputMode="numeric"
+              value={String(effectiveDays)}
+              onChange={(e) =>
+                onChange({
+                  days: Math.max(
+                    0,
+                    Math.min(3650, Number(e.target.value.replace(/\D/g, "")) || 0),
+                  ),
+                })
+              }
+              className="h-8 w-24"
+            />
+            {effectiveDays > 0 ? (
+              <span className="text-xs text-ink-faint">
+                ≈ {describeTerm(effectiveDays)}
+              </span>
+            ) : (
+              <span className="text-xs text-ink-faint">no warranty</span>
+            )}
+          </div>
+
+          <Textarea
+            value={line.warranty?.terms ?? ""}
+            onChange={(e) => onChange({ terms: e.target.value.slice(0, 2000) })}
+            rows={2}
+            placeholder="Warranty terms (optional)"
+            className="text-xs"
+          />
+
+          {overridden ? (
+            <Button variant="ghost" size="xs" onClick={onReset}>
+              Reset to catalog default
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ── Warranties issued on the completed sale ─────────────────────────── */
+
+function IssuedWarranties({ saleId }: { saleId: string }) {
+  const { data, loading, error } = useQuery(
+    (api) => api.getSaleWarrantiesForSale(saleId),
+    [saleId],
+  );
+
+  if (loading) {
+    return <p className="text-xs text-ink-faint">Checking issued warranties…</p>;
+  }
+  if (error || !data?.length) {
+    return (
+      <p className="text-xs text-ink-faint">
+        No sale warranty issued on this sale.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-sm border border-bench/30 bg-bench-fill px-3 py-2">
+      <p className="label-pad text-bench-ink">Warranty issued</p>
+      <ul className="mt-1 space-y-0.5">
+        {data.map((warranty) => (
+          <li
+            key={warranty.id}
+            className="flex items-baseline justify-between gap-3 text-xs"
+          >
+            <span className="mono font-semibold text-ink">
+              {warranty.warrantyCode}
+            </span>
+            <span className="text-ink-soft">
+              {describeTerm(warranty.termDays)}{" "}
+              {COVERAGE_LABEL[warranty.coverage].toLowerCase()}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

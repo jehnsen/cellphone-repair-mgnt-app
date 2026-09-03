@@ -145,6 +145,8 @@ const MENU_COPY: Record<string, string> = {
     "Stock on hand. Receive a delivery, adjust a count, retire a handset. Handsets are tracked one IMEI at a time; accessories by quantity; parts are consumed by repairs.",
   "/customers":
     "Everyone who's been through, searchable by name or IMEI. Their repairs by device, purchases, outstanding balances, warranties, and the store-credit ledger.",
+  "/warranties":
+    "The shop or manufacturer warranty a sold phone or laptop leaves with, the claims customers file against it, and units shipped back to a supplier for a factory defect. Claims live on the sales side — filing one never opens a job order.",
   "/reports":
     "The figures of record: sales by what was sold, margin, technician throughput, dead stock, unclaimed aging. Computed over the whole shop, not just what's on screen.",
   "/settings":
@@ -276,11 +278,58 @@ const FLOWS: { title: string; when: string; steps: string[]; role?: string }[] =
     steps: [
       "Menu → Point of sale. If the drawer is closed, open it with a starting cash count.",
       "Scan a barcode or search. Handsets are picked by IMEI; everything else adds by quantity.",
+      "For a phone or laptop, the cart line shows the warranty it will ship with — the product's catalog default. Open the panel on the line to change the term, switch Shop to Manufacturer, or add terms text. Leave it alone to use the default.",
       "For labour, use Service — search the catalog, or add a custom one-off with its own name and price.",
       "Tick Senior citizen / PWD if it applies and enter the ID. VAT comes off first, then the 20% discount.",
       "To take a trade-in: tick Apply a trade-in and enter the completed acquisition's ID and value. It offsets the total and never goes in the drawer.",
       "Pick the payment method. For cash, enter what was tendered and the screen shows the change.",
-      "Charge, and print the receipt on the 58 mm or 80 mm roll.",
+      "Charge, and print the receipt on the 58 mm or 80 mm roll. The confirmation lists any warranty code issued on the sale.",
+    ],
+  },
+  {
+    title: "Sell a unit with a warranty",
+    when: "Selling a phone or laptop that should go out under a shop or manufacturer warranty.",
+    steps: [
+      "Ring the unit up at Point of sale, picked by IMEI.",
+      "On that cart line, open the warranty panel — the strip that reads “No warranty issued · catalog default”.",
+      "Set the term in days (e.g. 365), choose Shop or Manufacturer, and add terms text if needed. Left alone, it uses the product's catalog warranty days.",
+      "A term of zero — the catalog default for most products until it's set — issues no warranty at all, and there will be nothing to claim later.",
+      "Charge. The confirmation shows the SW- code, and the warranty appears under Warranties → Sale warranties.",
+      "To have it happen automatically on every sale of a product, set that product's warranty days in the catalog so the cashier doesn't have to.",
+    ],
+  },
+  {
+    title: "File a warranty claim",
+    when: "A customer brings back a phone or laptop they bought from the shop.",
+    steps: [
+      "The unit must already have a sale warranty — see “Sell a unit with a warranty”. If none was issued, there is nothing to claim. Claims are always started from a warranty; there is no “new claim” button.",
+      "Menu → Warranties → Sale warranties. Find the customer's warranty by browsing the list or filtering by coverage, and open it.",
+      "If it was voided with its sale it can't be claimed — the File a claim button says so.",
+      "File a claim. Write what the customer reports is wrong.",
+      "Choose how it's handled: keep it under CP units (the counter deals with it), or attach a repair job order for the bench. Attaching one is optional, and filing the claim never creates a job order by itself.",
+      "Save. The claim opens on the Warranty claims tab, marked in or out of coverage as of today.",
+    ],
+  },
+  {
+    title: "Resolve or reject a warranty claim",
+    when: "A warranty claim has been dealt with.",
+    role: "Manager, owner, or cashier",
+    steps: [
+      "Menu → Warranties → Warranty claims. Open the claim.",
+      "Resolve, then pick the outcome: repaired in-house, replaced, returned to supplier, refunded, or rejected.",
+      "Add outcome notes if there's anything to record, and save.",
+      "A claim that's already resolved or rejected is read-only — the server won't let it change again.",
+    ],
+  },
+  {
+    title: "Send a unit back to a supplier",
+    when: "A unit has a factory defect and goes back to the vendor.",
+    role: "Manager, owner, or cashier",
+    steps: [
+      "From an open warranty claim, use Send unit to supplier — the unit is carried across for you. Or Menu → Warranties → Supplier returns → New return and pick the unit.",
+      "Choose the supplier and the reason, add a note, and send. The unit moves to “returned to supplier”.",
+      "When the vendor responds, open the return and Close it: replaced (enter the new unit's IMEI or serial), credited (enter the amount), rejected, or closed.",
+      "Closing a return that came from a claim also resolves that claim.",
     ],
   },
   {
@@ -388,6 +437,18 @@ const NOTES: { term: string; body: string }[] = [
   {
     term: "Repairs and sales are separate",
     body: "Money against a repair goes on the ticket, at any point in the job. The point of sale is for goods and counter services, and it has its own drawer.",
+  },
+  {
+    term: "Sale warranties aren't repair warranties",
+    body: "A phone or laptop sold at the counter carries its own shop or manufacturer warranty, tracked under Warranties. It's separate from the warranty a repair goes out under, which starts at release. Availing a sale warranty is a claim on the sales side — it never opens a job order.",
+  },
+  {
+    term: "A sale warranty needs a term",
+    body: "Selling a unit only issues a warranty if it has a non-zero term — from the product's catalog warranty days, or a term the cashier sets on the POS cart line. Most products start at zero, so if the Sale warranties list is empty after a sale, no term was set.",
+  },
+  {
+    term: "Claims start from a warranty",
+    body: "There's no “new claim” button. Open the unit's warranty on the Sale warranties tab and use File a claim — the Warranty claims tab only lists what's already been filed.",
   },
   {
     term: "Reports are the real totals",

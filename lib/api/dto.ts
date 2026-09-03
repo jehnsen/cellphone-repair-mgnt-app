@@ -196,6 +196,8 @@ export interface ProductDto {
   selling_price: number | string;
   is_serialized?: boolean;
   reorder_point?: number | null;
+  /** Catalog default term for the sale warranty issued when a unit sells. */
+  warranty_days?: number | null;
   track_inventory?: boolean;
   is_active?: boolean;
   category?: ProductCategoryDto | null;
@@ -241,7 +243,13 @@ export interface SerializedUnitDto {
   /** Permission-gated, like a product's cost. */
   acquisition_cost?: number | string | null;
   acquisition_source?: string | null;
-  status: "in_stock" | "reserved" | "sold" | "for_repair" | "written_off";
+  status:
+    | "in_stock"
+    | "reserved"
+    | "sold"
+    | "for_repair"
+    | "written_off"
+    | "returned_to_supplier";
   warranty_terms?: string | null;
   product?: ProductDto | null;
   created_at?: string | null;
@@ -445,4 +453,71 @@ export interface BoardDto {
     count?: number | null;
     tickets?: BoardCardDto[] | null;
   }> | null;
+}
+
+/* ── Sale-side warranty ─────────────────────────────────────────────────
+   `/sale-warranties`, `/sale-warranty-claims`, `/supplier-returns`. Lists
+   paginate at 15 (standard Laravel `meta`); `filter[...]` and `sort` are
+   spatie allow-lists. Nested relations follow `whenLoaded` — see the note
+   on each field for which reads carry it. */
+
+export interface SaleWarrantyDto {
+  ulid: string;
+  warranty_code: string;
+  coverage: "shop" | "manufacturer";
+  term_days: number;
+  starts_at?: string | null;
+  expiry_date?: string | null;
+  is_active: boolean;
+  voided_at?: string | null;
+  terms?: string | null;
+  /** A JSON array on newer rows, a single sentence on older ones. */
+  exclusions?: string | string[] | null;
+  /** Detail read only. */
+  sale_ulid?: string | null;
+  serialized_unit?: SerializedUnitDto | null;
+  customer?: CustomerDto | null;
+  /** Detail read only. */
+  claims?: SaleWarrantyClaimDto[] | null;
+  created_at?: string | null;
+}
+
+export interface SaleWarrantyClaimDto {
+  ulid: string;
+  reported_defect: string;
+  handling: "separate" | "repair_board";
+  within_coverage: boolean;
+  status: "open" | "resolved" | "rejected";
+  resolution?:
+    | "repaired_in_house"
+    | "replaced"
+    | "returned_to_supplier"
+    | "refunded"
+    | "rejected"
+    | null;
+  outcome_notes?: string | null;
+  repair_ticket_ulid?: string | null;
+  warranty?: SaleWarrantyDto | null;
+  serialized_unit?: SerializedUnitDto | null;
+  supplier_return_ulid?: string | null;
+  /** Detail read only. */
+  filed_by?: UserDto | null;
+  resolved_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface SupplierReturnDto {
+  ulid: string;
+  reason: "factory_defect" | "dead_on_arrival" | "wrong_item" | "other";
+  reason_note?: string | null;
+  status: "sent" | "replaced" | "credited" | "rejected" | "closed";
+  /** Absent without `reports.margin.view`. */
+  credit_amount?: number | string | null;
+  sent_at?: string | null;
+  resolved_at?: string | null;
+  sale_warranty_claim_ulid?: string | null;
+  supplier?: SupplierDto | null;
+  serialized_unit?: SerializedUnitDto | null;
+  replacement_serialized_unit?: SerializedUnitDto | null;
+  created_at?: string | null;
 }

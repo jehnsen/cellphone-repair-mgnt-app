@@ -2,6 +2,8 @@ import type {
   BranchKind,
   BranchProfile,
   BranchSummary,
+  ClaimHandling,
+  ClaimResolution,
   Role,
   ConditionCheck,
   Customer,
@@ -21,12 +23,16 @@ import type {
   MovementReason,
   Payment,
   PaymentMethod,
+  Paged,
   ProblemTag,
   RepairFinding,
   Resolution,
   RootCause,
   Sale,
   SaleLineKind,
+  SaleWarranty,
+  SaleWarrantyClaim,
+  SaleWarrantyCoverage,
   ServiceItem,
   SettingType,
   Shift,
@@ -34,6 +40,9 @@ import type {
   StockMovement,
   StoreCredit,
   Supplier,
+  SupplierReturn,
+  SupplierReturnOutcome,
+  SupplierReturnReason,
   Ticket,
   TicketPhoto,
   TicketStatus,
@@ -42,10 +51,13 @@ import type {
   User,
 } from "@/lib/types";
 import type {
+  ClaimListQuery,
   CustomerQuery,
   ItemQuery,
   SaleQuery,
+  SupplierReturnListQuery,
   TicketQuery,
+  WarrantyListQuery,
 } from "@/lib/shop/queries";
 
 /**
@@ -90,6 +102,16 @@ export interface NewSaleInput {
     unitPrice: number;
     unitCost: number;
     discount?: Discount;
+    /**
+     * Serialized-unit (handset) lines only: override the shop warranty issued
+     * at checkout. Omitted, the server falls back to the product's catalog
+     * `warranty_days` (0 ⇒ nothing issued). The server ignores it elsewhere.
+     */
+    warranty?: {
+      days: number;
+      coverage: SaleWarrantyCoverage;
+      terms?: string;
+    };
   }[];
   orderDiscount?: Discount;
   /** Statutory relief. The ID is captured on the sale, not just the customer. */
@@ -351,6 +373,78 @@ export interface ShopApi {
   getSales(query?: SaleQuery): Promise<Sale[]>;
   getSale(id: ID): Promise<Sale>;
   createSale(input: NewSaleInput): Promise<Sale>;
+
+  /* ── Sale-side warranty ───────────────────────────────────────────
+     The shop/manufacturer warranty a serialized unit ships with, the
+     claims against it, and shipping a defective unit back to the vendor.
+     None of this is cached in `db` — every read hits the server. Lists
+     are page-paginated; detail reads carry the nested claims / filer.
+
+     Gating (mirrors the server policies): the three list/detail reads
+     need `sales_warranty.view` (supplier returns strictly need
+     `inventory.view`, which every role that holds `sales_warranty.view`
+     also has). Filing/resolving a claim needs `sales_warranty.manage`;
+     creating/closing a supplier return needs `supplier_returns.manage`. */
+
+  getSaleWarranties(query?: WarrantyListQuery): Promise<Paged<SaleWarranty>>;
+  /** Detail — includes `claims[]`. */
+  getSaleWarranty(id: ID): Promise<SaleWarranty>;
+  /** Every warranty a sale issued. Unpaginated; used by the POS confirmation. */
+  getSaleWarrantiesForSale(saleId: ID): Promise<SaleWarranty[]>;
+  /** A unit's warranty history. Unpaginated. */
+  getSaleWarrantiesForUnit(unitId: ID): Promise<SaleWarranty[]>;
+  /**
+   * File a claim against a warranty. Never creates a job order; a
+   * `repair_board` claim may pin an existing ticket for the bench.
+   */
+  fileWarrantyClaim(input: {
+    warrantyId: ID;
+    reportedDefect: string;
+    handling: ClaimHandling;
+    repairTicketId?: ID;
+  }): Promise<SaleWarrantyClaim>;
+  getWarrantyClaims(query?: ClaimListQuery): Promise<Paged<SaleWarrantyClaim>>;
+  /** Detail — includes `filedBy`. */
+  getWarrantyClaim(id: ID): Promise<SaleWarrantyClaim>;
+  /** `409 INVALID_STATUS_TRANSITION` if the claim is already closed. */
+  resolveWarrantyClaim(input: {
+    claimId: ID;
+    resolution: ClaimResolution;
+    outcomeNotes?: string;
+  }): Promise<SaleWarrantyClaim>;
+
+  getSupplierReturns(
+    query?: SupplierReturnListQuery,
+  ): Promise<Paged<SupplierReturn>>;
+  getSupplierReturn(id: ID): Promise<SupplierReturn>;
+  /**
+   * Ship a serialized unit back to its vendor. `409` if the unit is not
+   * `in_stock` / `sold` / `for_repair`. Optionally born from a claim.
+   */
+  createSupplierReturn(input: {
+    serializedUnitId: ID;
+    supplierId: ID;
+    reason: SupplierReturnReason;
+    reasonNote?: string;
+    saleWarrantyClaimId?: ID;
+  }): Promise<SupplierReturn>;
+  /**
+   * Record what came back. `replaced` mints a fresh unit (needs an IMEI or
+   * serial); `credited` takes an amount. Closing also resolves any still-open
+   * linked claim. `409` if already closed.
+   */
+  closeSupplierReturn(input: {
+    returnId: ID;
+    outcome: SupplierReturnOutcome;
+    outcomeNotes?: string;
+    replacement?: {
+      imei?: string;
+      serialNumber?: string;
+      condition?: HandsetCondition;
+      acquisitionCost?: number;
+    };
+    creditAmount?: number;
+  }): Promise<SupplierReturn>;
 
   /**
    * Ad-hoc labour for the counter. The server prices a service line from the

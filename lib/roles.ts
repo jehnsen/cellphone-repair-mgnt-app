@@ -52,6 +52,9 @@ const ALL: Permission[] = [
   "settings.manage",
   "users.manage",
   "branch.switch",
+  "sales_warranty.view",
+  "sales_warranty.manage",
+  "supplier_returns.manage",
 ];
 
 export const PERMISSION_LABEL: Record<Permission, string> = {
@@ -76,6 +79,9 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   "settings.manage": "Manage settings",
   "users.manage": "Manage users",
   "branch.switch": "See and switch between branches",
+  "sales_warranty.view": "View sale warranties, claims, and supplier returns",
+  "sales_warranty.manage": "File and resolve warranty claims",
+  "supplier_returns.manage": "Create and close supplier returns",
 };
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -98,6 +104,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "pos.return",
     "shift.open",
     "shift.close",
+    /* The counter owns the sales-side warranty end to end — issuing it at
+       checkout, taking the claim, and sending a dud back to the vendor. */
+    "sales_warranty.view",
+    "sales_warranty.manage",
+    "supplier_returns.manage",
   ],
   technician: [
     "ticket.edit",
@@ -105,6 +116,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "quote.send",
     "inventory.view",
     "inventory.adjust",
+    /* Read-only: a technician sees a claim to know what the bench is for,
+       but the sales side files and resolves it. */
+    "sales_warranty.view",
   ],
 };
 
@@ -123,6 +137,7 @@ export const NAV_PERMISSION: Record<string, Permission | null> = {
   "/pos": "pos.sell",
   "/inventory": "inventory.view",
   "/customers": null,
+  "/warranties": "sales_warranty.view",
   "/reports": "reports.view",
   "/settings": "settings.manage",
   "/help": null,

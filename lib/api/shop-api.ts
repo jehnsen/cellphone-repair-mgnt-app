@@ -9,6 +9,7 @@ import {
 import { createLiveApi, type LiveContext } from "@/lib/api/live-api";
 import { createUnavailableApi } from "@/lib/api/unavailable";
 import { createCommerceApi, loadInventory } from "@/lib/api/live-commerce";
+import { createWarrantyApi } from "@/lib/api/live-warranty";
 import { createSettingsApi } from "@/lib/api/live-settings";
 import { toSale, toShift, toSupplier } from "@/lib/api/mappers-commerce";
 import type { HttpClient } from "@/lib/api/http";
@@ -69,6 +70,10 @@ const MUTATIONS = new Set<keyof ShopApi>([
   "deleteDeviceModel",
   "createSale",
   "createService",
+  "fileWarrantyClaim",
+  "resolveWarrantyClaim",
+  "createSupplierReturn",
+  "closeSupplierReturn",
   "receiveStock",
   "adjustStock",
   "openShift",
@@ -106,6 +111,7 @@ export function createShopApi({
     ...createUnavailableApi(),
     ...createLiveApi(client, context),
     ...createCommerceApi(client, context),
+    ...createWarrantyApi(client),
     ...createSettingsApi(client, context),
   };
 

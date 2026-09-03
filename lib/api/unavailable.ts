@@ -143,6 +143,52 @@ export function createUnavailableApi(): ShopApi {
     async createService() {
       throw missing("Adding a service", "POST /services");
     },
+
+    /* Sale-side warranty. The live client (`createWarrantyApi`) overrides
+       these wherever the API is reachable; the floor reads empty and fails
+       loudly on a write, same as everywhere else. */
+    async getSaleWarranties() {
+      return { rows: [], total: 0, page: 1, perPage: 15, lastPage: 1 };
+    },
+    async getSaleWarranty() {
+      throw missing("Sale warranty detail", "GET /sale-warranties/{ulid}");
+    },
+    async getSaleWarrantiesForSale() {
+      return [];
+    },
+    async getSaleWarrantiesForUnit() {
+      return [];
+    },
+    async fileWarrantyClaim() {
+      throw missing("Filing a warranty claim", "POST /sale-warranties/{ulid}/claims");
+    },
+    async getWarrantyClaims() {
+      return { rows: [], total: 0, page: 1, perPage: 15, lastPage: 1 };
+    },
+    async getWarrantyClaim() {
+      throw missing("Warranty claim detail", "GET /sale-warranty-claims/{ulid}");
+    },
+    async resolveWarrantyClaim() {
+      throw missing(
+        "Resolving a warranty claim",
+        "POST /sale-warranty-claims/{ulid}/resolve",
+      );
+    },
+    async getSupplierReturns() {
+      return { rows: [], total: 0, page: 1, perPage: 15, lastPage: 1 };
+    },
+    async getSupplierReturn() {
+      throw missing("Supplier return detail", "GET /supplier-returns/{ulid}");
+    },
+    async createSupplierReturn() {
+      throw missing("Creating a supplier return", "POST /supplier-returns");
+    },
+    async closeSupplierReturn() {
+      throw missing(
+        "Closing a supplier return",
+        "POST /supplier-returns/{ulid}/close",
+      );
+    },
     async getShifts() {
       return [];
     },
