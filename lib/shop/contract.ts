@@ -649,6 +649,11 @@ export interface ShopApi {
      an owner listing staff across the business reads it under the
      all-branches scope; a cashier gets a 403 and the screen says so. */
   getUsers(): Promise<User[]>;
+  /** Active technicians for the assignment pickers — the whole bench across
+      branches (a job order at any branch may be assigned to any of them),
+      falling back to the caller's own branch when the server refuses the
+      cross-branch read. */
+  getTechnicians(): Promise<User[]>;
   createUser(input: NewUserInput): Promise<User>;
   updateUser(id: ID, patch: UserPatch): Promise<User>;
   /** Soft-deletes on the server: the row survives, but stops signing in. */
@@ -711,8 +716,11 @@ export interface ShopApi {
   /** Upsert: creates on first save, updates thereafter. */
   saveFinding(input: SaveFindingInput): Promise<RepairFinding>;
   markReadyForPickup(input: { ticketIds: ID[]; actorId: ID }): Promise<Ticket[]>;
-  /** Scan-and-match the unit before it leaves. The server refuses a release
-   *  without a matching release-phase verification (or an owner override). */
+  /** Scan-and-match the unit before it leaves — chain-of-custody
+   *  documentation, *not* a release gate: the server dropped the IMEI half of
+   *  its release guard because it stranded units whose stored IMEI never
+   *  passed Luhn. `scannedImei` must still be a valid 15-digit IMEI; the
+   *  endpoint rejects anything else. Release with no scan at all instead. */
   verifyImei(input: {
     ticketId: ID;
     scannedImei: string;

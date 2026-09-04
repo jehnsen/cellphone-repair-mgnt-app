@@ -90,7 +90,17 @@ function todayPlus(days: number): string {
 
 export default function IntakePage() {
   const router = useRouter();
-  const { db, user, api } = useShop();
+  const { db, user, api, canSwitchBranch } = useShop();
+
+  /* A job order is always filed at the user's home branch, whatever the
+     branch switcher is pointed at — so the customer must be one that branch
+     can create against. Pin the customer search there; without it an owner
+     viewing another branch could pick a customer the create call 404s on.
+     Only a `branch.switch` holder needs this — everyone else is already
+     scoped to their own branch, and the server rejects the explicit param
+     from them. (Technicians are exempt: the server resolves the assignee
+     across branches, so that picker stays shop-wide.) */
+  const homeBranchId = canSwitchBranch ? user.branchId : undefined;
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [draft, setDraft] = useState<NewCustomerDraft>({ name: "", mobile: "", email: "" });
@@ -118,15 +128,13 @@ export default function IntakePage() {
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Ticket | null>(null);
 
-  /* The bench roster, from the unscoped `/users` read at boot — same source
-     the board's assign dialog uses. Optional at intake: a job can come in
-     unassigned and be picked up from the board later. */
+  /* The whole bench, across branches — not just the ones at the branch this
+     counter is on. Optional at intake: a job can come in unassigned and be
+     picked up from the board later. */
+  const { data: techList } = useQuery((api) => api.getTechnicians());
   const technicians = useMemo(
-    () =>
-      db.users
-        .filter((u) => u.isTechnician && u.active)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [db.users],
+    () => [...(techList ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [techList],
   );
 
   /* Brands and models come from the shop's own catalog. A device the shop has
@@ -260,6 +268,7 @@ export default function IntakePage() {
                 onSelect={setCustomer}
                 draft={draft}
                 onDraftChange={setDraft}
+                branchId={homeBranchId}
               />
             </PanelBody>
           </Panel>
@@ -540,7 +549,9 @@ export default function IntakePage() {
                 </Select>
                 {technicians.length === 0 ? (
                   <p className="text-xs text-ink-faint">
-                    No one on staff is flagged as a technician yet.
+                    No one on staff is flagged as a technician yet. Add one
+                    under Settings &rsaquo; Technicians, or leave it for the
+                    board.
                   </p>
                 ) : null}
               </div>

@@ -36,18 +36,23 @@ export function CustomerPicker({
   draft,
   onDraftChange,
   className,
+  branchId,
 }: {
   customer: Customer | null;
   onSelect: (customer: Customer | null) => void;
   draft: NewCustomerDraft;
   onDraftChange: (draft: NewCustomerDraft) => void;
   className?: string;
+  /** Pin the search to one branch's customers — intake passes its home
+      branch so a picked customer is always one a job order can be filed
+      against. See CustomerQuery.branchId. */
+  branchId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { data: results, loading } = useQuery(
-    (api) => api.getCustomers({ search }),
-    [search],
+    (api) => api.getCustomers({ search, branchId }),
+    [search, branchId],
   );
 
   if (customer) {

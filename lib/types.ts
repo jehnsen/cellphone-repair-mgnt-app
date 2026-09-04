@@ -370,6 +370,9 @@ export interface Ticket {
   promisedAt: ISODate;
   warrantyDays: number;
   technicianId?: ID;
+  /** Name from the ticket payload — resolves even when the assignee sits at
+      another branch and isn't in this browser's user cache. */
+  technicianName?: string;
 
   /* Work */
   /** @deprecated Superseded by `finding`. Kept while the API still lacks the

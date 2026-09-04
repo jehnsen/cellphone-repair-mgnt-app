@@ -639,7 +639,12 @@
      spills. */
   @page {
     size: auto;
-    margin: 12mm;
+    /* The claim stub / release slip margin is padding on `.stub` (see
+       print-css.ts), not here: a `@page` margin is silently dropped when the
+       print dialog's Margins is set to None/Minimum and by some preview
+       renderers, so the sheet ran right to the paper edge. Both stub docs
+       are a single page, so a per-page margin buys nothing over padding. */
+    margin: 0;
   }
   @page receipt {
     size: 80mm auto;

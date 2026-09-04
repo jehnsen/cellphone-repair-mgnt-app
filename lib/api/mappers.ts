@@ -378,6 +378,7 @@ export function toTicket(dto: RepairTicketDto, extras: TicketExtras = {}): Ticke
     promisedAt: promisedAtFrom(dto.promised_date),
     warrantyDays: dto.warranty_days_offered ?? 0,
     technicianId: dto.assigned_technician?.ulid,
+    technicianName: dto.assigned_technician?.name ?? undefined,
 
     diagnosis: undefined,
     rootCause: undefined,

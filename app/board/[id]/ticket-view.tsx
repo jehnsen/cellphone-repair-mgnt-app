@@ -111,10 +111,14 @@ export function TicketView({ ticketId }: { ticketId: string }) {
     [ticket?.customerId, Boolean(cachedCustomer)],
   );
   const customer = cachedCustomer ?? fetchedCustomer ?? null;
-  const technician = useMemo(
-    () => (ticket?.technicianId ? db.users.find((u) => u.id === ticket.technicianId) : null),
-    [ticket, db.users],
-  );
+  const technicianName = useMemo(() => {
+    if (!ticket?.technicianId) return null;
+    return (
+      ticket.technicianName ??
+      db.users.find((u) => u.id === ticket.technicianId)?.name ??
+      null
+    );
+  }, [ticket, db.users]);
 
   if (error) {
     return (
@@ -197,10 +201,10 @@ export function TicketView({ ticketId }: { ticketId: string }) {
                 onClick={() => setAssigning(true)}
                 className="tap -mx-1 rounded px-1 font-medium text-bench-ink hover:underline"
               >
-                {technician?.name ?? "Assign…"}
+                {technicianName ?? "Assign…"}
               </button>
             ) : (
-              technician?.name ?? "Unassigned"
+              technicianName ?? "Unassigned"
             ),
           },
         ]}

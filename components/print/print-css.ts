@@ -187,6 +187,15 @@ export const PRINT_CSS = `
 }
 
 @media print {
+  /* The sheet's own margin. Kept here as padding rather than on the @page
+     rule, because a @page margin is silently dropped whenever the print
+     dialog's Margins is set to None/Minimum (and by some preview renderers)
+     -- which ran the stub right to the paper edge. Both stub docs are a
+     single page, so a real per-page margin gains nothing. */
+  .stub {
+    padding: 12mm;
+  }
+
   /* Neither copy may split across a page, and the pair must not be pushed
      onto a second sheet.
 

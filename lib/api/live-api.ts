@@ -1,4 +1,5 @@
 import { agingOf } from "@/lib/status";
+import { can } from "@/lib/roles";
 import { transitionPath } from "@/lib/stages";
 import { money } from "@/lib/format";
 import { ApiError } from "@/lib/api/errors";
@@ -270,10 +271,17 @@ export function createLiveApi(
     modelUlid: string,
     imei: string,
     color: string,
+    /* The branch the customer belongs to (the job order's own branch). The
+       device list is a GET, so it would otherwise inherit the branch
+       switcher's scope — and an owner viewing another branch would get a 404
+       for a customer that is really on their home branch. Only passed for a
+       `branches.view_all` holder; everyone else is already scoped right. */
+    branchScope?: string,
   ): Promise<string> => {
     const clean = imei.replace(/\D/g, "");
     const devices = await client.get<CustomerDeviceDto[]>(
       `/customers/${customerUlid}/devices`,
+      branchScope ? { query: { branch: branchScope } } : undefined,
     );
     /* Only an identifier we actually have can match an existing unit — an
        empty one would collide with every prior device the customer took in
@@ -347,6 +355,13 @@ export function createLiveApi(
 
     async createTicket(input: NewTicketInput) {
       const branchUlid = requireBranch(context);
+      /* Reads inside this flow must stay on the job order's own branch, not
+         wherever the branch switcher is pointed. Only a `branches.view_all`
+         holder may name a branch explicitly; for everyone else the request
+         is already scoped to theirs. */
+      const self = context.currentUser();
+      const readScope =
+        self && can(self.role, "branch.switch") ? branchUlid : undefined;
 
       let customerUlid = input.customerId;
       if (!customerUlid && input.newCustomer) {
@@ -375,6 +390,7 @@ export function createLiveApi(
         modelUlid,
         input.device.imei,
         input.device.color,
+        readScope,
       );
 
       const { data } = await client.post<RepairTicketDto>("/tickets", {
@@ -454,7 +470,9 @@ export function createLiveApi(
     },
 
     async verifyImei({ ticketId, scannedImei, phase = "release", overrideReason }) {
-      const clean = scannedImei.replace(/D/g, "");
+      /* `\D`, not `D`: the server normalises anyway, but sending the grouped
+         form a scanner or `formatImei` produces made the digits here wrong. */
+      const clean = scannedImei.replace(/\D/g, "");
       /* An override is a separate, logged endpoint — owner only — for a unit
          whose IMEI cannot be read or was mistyped at intake. */
       const path = overrideReason
@@ -572,8 +590,13 @@ export function createLiveApi(
     /* ── Customers ─────────────────────────────────────────────────── */
 
     async getCustomers(query = {}) {
+      const q: Record<string, string> = {};
+      if (query.search) q["filter[name]"] = query.search.trim();
+      /* An explicit branch pins the read past the ambient switcher scope —
+         see CustomerQuery.branchId. */
+      if (query.branchId) q.branch = query.branchId;
       const rows = await client.getAll<CustomerDto>("/customers", {
-        query: query.search ? { "filter[name]": query.search.trim() } : undefined,
+        query: Object.keys(q).length ? q : undefined,
       });
 
       const needle = query.search?.trim().toLowerCase();
@@ -810,6 +833,33 @@ export function createLiveApi(
         if (caught instanceof ApiError && caught.code === "FORBIDDEN") {
           const self = context.currentUser();
           return self ? [self] : [];
+        }
+        throw caught;
+      }
+    },
+
+    async getTechnicians() {
+      const bench = (rows: UserDto[]) =>
+        rows.map(toUser).filter((u) => u.isTechnician && u.active);
+
+      /* The whole bench, across branches: a small shop runs one set of
+         technicians that serves every storefront, so a job order at any
+         branch can be assigned to any of them (the server resolves the
+         assignee unscoped — see RepairTicketController). The wide read needs
+         `branches.view_all`; a manager falls back to their own branch's
+         staff, and a cashier — who cannot list staff at all — to an empty
+         list, leaving the job for the board to assign. */
+      try {
+        const rows = await client.getAll<UserDto>("/users", {
+          query: { branch: ALL_BRANCHES },
+        });
+        return bench(rows);
+      } catch (caught) {
+        if (caught instanceof ApiError && caught.code === "FORBIDDEN") {
+          const rows = await client
+            .getAll<UserDto>("/users")
+            .catch(() => [] as UserDto[]);
+          return bench(rows);
         }
         throw caught;
       }

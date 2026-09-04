@@ -28,7 +28,7 @@ import { useMutation, useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
 import { agingOf } from "@/lib/status";
 import { STAGE_META, stageOf } from "@/lib/stages";
-import { formatDate, formatImei, formatMobile, peso } from "@/lib/format";
+import { formatDate, formatImei, formatMobile, isValidImei, peso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PaymentMethod, Ticket } from "@/lib/types";
 
@@ -159,12 +159,28 @@ export function ReleaseView() {
   const submitRelease = async () => {
     if (!ticket) return;
 
-    /* Chain of custody: the server refuses to release a unit without a
-       matching release-phase IMEI scan, so verify before transitioning. The
-       scan is recorded either way — the release guard is what acts on it. */
-    try {
-      const scanned = scannedImei.replace(/\D/g, "") || ticket.device.imei;
-      if (scanned) {
+    /* Chain of custody, not a gate. The server used to refuse a release
+       without a matching release-phase scan and dropped that half of the
+       guard deliberately — it blocked real releases whenever nobody ran a
+       scan, or the device's own IMEI never passed Luhn at intake (see
+       RepairTicketService::assertBalanceSettledForRelease). So the scan is
+       optional here too: nothing typed means nothing to verify.
+
+       It used to fall back to the ticket's own IMEI, which is what sent an
+       invalid stored IMEI to a `required|ValidImei` endpoint and 422'd the
+       release for a counter that had scanned nothing at all. */
+    const scanned = scannedImei.replace(/\D/g, "");
+    if (scanned) {
+      /* Caught here rather than as a 422: the endpoint takes a valid IMEI
+         only, and "clear the box" is the fix the counter can act on. */
+      if (!isValidImei(scanned)) {
+        toast.error("That is not a valid 15-digit IMEI.", {
+          description:
+            "Re-read the unit, or clear the box to release without a scan.",
+        });
+        return;
+      }
+      try {
         const { matches } = await api.verifyImei({
           ticketId: ticket.id,
           scannedImei: scanned,
@@ -177,14 +193,17 @@ export function ReleaseView() {
           });
           return;
         }
+      } catch (caught) {
+        /* Recording the scan is documentation; failing to record it must not
+           strand a customer at the counter. Say so and carry on. */
+        const { message } = toastError(
+          caught,
+          "Could not record the unit's IMEI scan.",
+        );
+        toast.warning(message, {
+          description: "Releasing anyway — the scan was not logged.",
+        });
       }
-    } catch (caught) {
-      const { message, description } = toastError(
-        caught,
-        "Could not verify the unit's IMEI.",
-      );
-      toast.error(message, { description });
-      return;
     }
 
     const { data: result, error } = await release.mutate({
@@ -395,9 +414,16 @@ export function ReleaseView() {
                   </div>
 
                   {/* The last check before the unit leaves: the thing in your
-                      hand is the thing on the job order. */}
+                      hand is the thing on the job order. Optional — a scan is
+                      documentation, and the server does not gate release on
+                      one. */}
                   <div className="space-y-1.5">
-                    <Label htmlFor="scanned-imei">Scan the unit</Label>
+                    <Label htmlFor="scanned-imei">
+                      Scan the unit{" "}
+                      <span className="font-normal text-ink-faint">
+                        (optional)
+                      </span>
+                    </Label>
                     <InputMono
                       id="scanned-imei"
                       value={scannedImei}
@@ -410,7 +436,9 @@ export function ReleaseView() {
                           ticket.device.imei.replace(/\D/g, "")
                           ? "Matches this job order."
                           : "Does not match — check you have the right unit."
-                        : `Leave blank to confirm ${formatImei(ticket.device.imei)}.`}
+                        : ticket.device.imei
+                          ? `Leave blank to release without scanning. On the job order: ${formatImei(ticket.device.imei)}.`
+                          : "Leave blank to release without scanning."}
                     </p>
                   </div>
 

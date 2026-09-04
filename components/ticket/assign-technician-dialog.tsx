@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useShop } from "@/lib/shop/store";
+import { useQuery, useShop } from "@/lib/shop/store";
 import { toastError } from "@/lib/api/errors";
 import type { Ticket } from "@/lib/types";
 
@@ -51,16 +51,17 @@ export function AssignTechnicianDialog({
     if (open) setChoice(ticket.technicianId ?? "");
   }, [open, ticket.technicianId]);
 
+  /* Every branch's bench, not just this one's — a job can be assigned to a
+     technician who sits at another site. */
+  const { data: techList } = useQuery((client) => client.getTechnicians());
   const technicians = useMemo(
-    () =>
-      db.users
-        .filter((u) => u.isTechnician && u.active)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [db.users],
+    () => [...(techList ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [techList],
   );
 
   const current = ticket.technicianId
-    ? db.users.find((u) => u.id === ticket.technicianId)
+    ? (technicians.find((u) => u.id === ticket.technicianId) ??
+      db.users.find((u) => u.id === ticket.technicianId))
     : null;
   const unchanged = choice === (ticket.technicianId ?? "");
 

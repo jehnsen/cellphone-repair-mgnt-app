@@ -51,6 +51,12 @@ export interface SaleQuery {
 
 export interface CustomerQuery {
   search?: string;
+  /** Restrict to one branch's customers, by ULID — intake pins this to the
+      branch a job order will actually be filed at (the caller's home
+      branch), so a customer picked here is always one it can create against.
+      Only a `branches.view_all` holder may pass it; others are already
+      scoped to their own branch. */
+  branchId?: string;
 }
 
 /* ── Sale-side warranty list filters ─────────────────────────────────────
