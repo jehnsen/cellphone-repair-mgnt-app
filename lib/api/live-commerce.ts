@@ -124,6 +124,32 @@ export function createCommerceApi(
 
       return toInventoryItem(data);
     },
+
+    async updateItem(input) {
+      const body: Record<string, unknown> = {};
+      if (input.name !== undefined) body.name = input.name.trim();
+      if (input.sku !== undefined) body.sku = input.sku.trim();
+      if (input.barcode !== undefined) {
+        body.barcode = input.barcode?.trim() || null;
+      }
+      if (input.categoryId !== undefined) {
+        body.product_category_ulid = input.categoryId;
+      }
+      if (input.brandId !== undefined) {
+        body.device_brand_ulid = input.brandId || null;
+      }
+      if (input.unitCost !== undefined) body.cost = input.unitCost;
+      if (input.sellingPrice !== undefined) body.selling_price = input.sellingPrice;
+      if (input.reorderPoint !== undefined) body.reorder_point = input.reorderPoint;
+      if (input.warrantyDays !== undefined) body.warranty_days = input.warrantyDays;
+      if (input.active !== undefined) body.is_active = input.active;
+
+      const { data } = await client.patch<ProductDto>(
+        `/products/${input.itemId}`,
+        { body },
+      );
+      return toInventoryItem(data);
+    },
     /* ── Inventory ─────────────────────────────────────────────────── */
 
     async getItems(query = {}) {
@@ -158,11 +184,45 @@ export function createCommerceApi(
         : movements;
     },
 
-    async getSuppliers() {
-      const rows = await client.getAll<SupplierDto>("/suppliers", {
-        query: { sort: "name" },
-      });
+    async getSuppliers(opts = {}) {
+      const query: Record<string, string> = { sort: "name" };
+      if (!opts.includeInactive) query["filter[is_active]"] = "true";
+      const rows = await client.getAll<SupplierDto>("/suppliers", { query });
       return rows.map(toSupplier);
+    },
+
+    async createSupplier(input) {
+      const { data } = await client.post<SupplierDto>("/suppliers", {
+        body: {
+          name: input.name.trim(),
+          contact_name: input.contactPerson?.trim() || null,
+          contact_phone: input.mobile?.trim() || null,
+          contact_email: input.email?.trim() || null,
+          terms: input.terms?.trim() || null,
+          notes: input.note?.trim() || null,
+          is_active: true,
+        },
+      });
+      return toSupplier(data);
+    },
+
+    async updateSupplier(input) {
+      const body: Record<string, unknown> = {};
+      if (input.name !== undefined) body.name = input.name.trim();
+      if (input.contactPerson !== undefined) {
+        body.contact_name = input.contactPerson.trim() || null;
+      }
+      if (input.mobile !== undefined) body.contact_phone = input.mobile.trim() || null;
+      if (input.email !== undefined) body.contact_email = input.email.trim() || null;
+      if (input.terms !== undefined) body.terms = input.terms.trim() || null;
+      if (input.note !== undefined) body.notes = input.note.trim() || null;
+      if (input.active !== undefined) body.is_active = input.active;
+
+      const { data } = await client.patch<SupplierDto>(
+        `/suppliers/${input.id}`,
+        { body },
+      );
+      return toSupplier(data);
     },
 
     async receiveStock(input) {
@@ -396,10 +456,21 @@ export function createCommerceApi(
          a sale against `findOpenFor($request->user())`. Taking any open shift
          here let the POS believe a drawer was open when it belonged to
          somebody else — the cart then failed at checkout with SHIFT_NOT_OPEN,
-         and the day sheet reported another person's cash as on hand. */
-      const me = context.currentUser()?.id;
+         and the day sheet reported another person's cash as on hand.
+
+         Match on email as well as ulid: when `/users` is unreadable (a cashier
+         cannot list staff) sign-in falls back to a synthetic `local-<email>`
+         id, which never equals the real `cashier.ulid`. Without the email
+         check the POS can't see its own open shift, so "Open drawer" just
+         loops on the server's "you already have an open shift". */
+      const self = context.currentUser();
+      const me = self?.id;
+      const myEmail = self?.email?.toLowerCase();
+      const isMine = (shift: ShiftDto) =>
+        shift.cashier?.ulid === me ||
+        (!!myEmail && shift.cashier?.email?.toLowerCase() === myEmail);
       const open = rows.find(
-        (shift) => shift.is_open && (!me || shift.cashier?.ulid === me),
+        (shift) => shift.is_open && (!me || isMine(shift)),
       );
 
       /* The list omits cash movements; the drawer screen needs them. */

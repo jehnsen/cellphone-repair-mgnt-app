@@ -18,7 +18,9 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
 import { NewItemDialog } from "@/components/inventory/new-item-dialog";
+import { EditItemDialog } from "@/components/inventory/edit-item-dialog";
 import { ItemHistoryDialog } from "@/components/inventory/item-history-dialog";
+import { SupplierDialog } from "@/components/settings/supplier-dialog";
 import { Panel, PanelScroller } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Input, InputMono } from "@/components/ui/input";
@@ -83,6 +85,7 @@ export function InventoryView() {
 
   const [itemClass, setItemClass] = useState<ItemClass>("handset");
   const [addingItem, setAddingItem] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [viewingHistory, setViewingHistory] = useState<InventoryItem | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "dead">("all");
@@ -91,7 +94,9 @@ export function InventoryView() {
   const [adjusting, setAdjusting] = useState<InventoryItem | null>(null);
 
   const { data: items, loading, error, refetch } = useQuery((api) => api.getItems({}));
-  const { data: suppliers } = useQuery((api) => api.getSuppliers());
+  const { data: suppliers, refetch: refetchSuppliers } = useQuery((api) =>
+    api.getSuppliers(),
+  );
 
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -319,6 +324,13 @@ export function InventoryView() {
                             </Button>
                             <Button
                               variant="ghost"
+                              size="xs"
+                              onClick={() => setEditingItem(item)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
                               size="icon-xs"
                               title="Movement history"
                               aria-label={`Movement history for ${item.name}`}
@@ -382,6 +394,7 @@ export function InventoryView() {
         <ReceiveDialog
           item={receiving}
           suppliers={suppliers ?? []}
+          onSuppliersChanged={refetchSuppliers}
           userId={user.id}
           onClose={() => setReceiving(null)}
         />
@@ -394,6 +407,12 @@ export function InventoryView() {
           onClose={() => setAdjusting(null)}
         />
       ) : null}
+
+      <EditItemDialog
+        item={editingItem}
+        onOpenChange={(open) => !open && setEditingItem(null)}
+        onSaved={refetch}
+      />
     </div>
   );
 }
@@ -413,11 +432,13 @@ interface UnitDraft {
 function ReceiveDialog({
   item,
   suppliers,
+  onSuppliersChanged,
   userId,
   onClose,
 }: {
   item: InventoryItem;
   suppliers: { id: string; name: string }[];
+  onSuppliersChanged: () => void;
   userId: string;
   onClose: () => void;
 }) {
@@ -427,6 +448,7 @@ function ReceiveDialog({
   const [quantity, setQuantity] = useState("1");
   const [unitCost, setUnitCost] = useState(String(item.unitCost));
   const [supplierId, setSupplierId] = useState(item.supplierId ?? "");
+  const [addingSupplier, setAddingSupplier] = useState(false);
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
   const [units, setUnits] = useState<UnitDraft[]>([
@@ -505,7 +527,16 @@ function ReceiveDialog({
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Supplier</Label>
+              <div className="flex items-center justify-between">
+                <Label>Supplier</Label>
+                <button
+                  type="button"
+                  onClick={() => setAddingSupplier(true)}
+                  className="tap text-xs font-medium text-bench-ink hover:underline"
+                >
+                  + New
+                </button>
+              </div>
               <Select value={supplierId} onValueChange={setSupplierId}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select supplier" />
@@ -697,6 +728,17 @@ function ReceiveDialog({
           </div>
         </div>
       </DialogContent>
+
+      {addingSupplier ? (
+        <SupplierDialog
+          onClose={() => setAddingSupplier(false)}
+          onSaved={(saved) => {
+            setAddingSupplier(false);
+            onSuppliersChanged();
+            setSupplierId(saved.id);
+          }}
+        />
+      ) : null}
     </Dialog>
   );
 }

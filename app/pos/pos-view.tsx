@@ -447,6 +447,11 @@ export function PosView() {
                     "Could not open the shift.",
                   );
                   toast.error(message, { description });
+                  /* The commonest failure here is "you already have an open
+                     shift" — the drawer is open, the screen just hasn't caught
+                     up. Re-read so the POS loads it instead of looping on the
+                     gate. Harmless when the open genuinely failed. */
+                  refetchShift();
                 }
               }}
             >

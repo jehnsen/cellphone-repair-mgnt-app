@@ -13,11 +13,13 @@ import {
   SlidersHorizontal,
   Smartphone,
   Trash2,
+  Truck,
   UserCog,
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/page-header";
+import { SupplierDialog } from "@/components/settings/supplier-dialog";
 import { Panel, PanelBody, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +67,7 @@ import type {
   MessageTemplate,
   Role,
   ShopSetting,
+  Supplier,
   User,
 } from "@/lib/types";
 
@@ -107,6 +110,9 @@ export function SettingsView() {
           <TabsTrigger value="devices">
             <Smartphone aria-hidden /> Devices
           </TabsTrigger>
+          <TabsTrigger value="suppliers">
+            <Truck aria-hidden /> Suppliers
+          </TabsTrigger>
           <TabsTrigger value="templates">
             <MessageSquareText aria-hidden /> Message templates
           </TabsTrigger>
@@ -133,6 +139,9 @@ export function SettingsView() {
         </TabsContent>
         <TabsContent value="devices" className="pt-4">
           <DevicesTab />
+        </TabsContent>
+        <TabsContent value="suppliers" className="pt-4">
+          <SuppliersTab />
         </TabsContent>
         <TabsContent value="templates" className="pt-4">
           <TemplatesTab />
@@ -1814,6 +1823,123 @@ function ModelDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Suppliers ───────────────────────────────────────────────────────── */
+
+/**
+ * Who the shop buys stock from. The receiving picker and supplier returns
+ * both draw on this list. A supplier is deactivated, never removed — past
+ * goods receipts and returns keep theirs.
+ */
+function SuppliersTab() {
+  const query = useQuery((api) => api.getSuppliers({ includeInactive: true }), []);
+  const [dialog, setDialog] = useState<
+    { mode: "new" } | { mode: "edit"; supplier: Supplier } | null
+  >(null);
+
+  const suppliers = useMemo(
+    () => [...(query.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [query.data],
+  );
+
+  if (query.loading) {
+    return (
+      <Panel>
+        <LoadingRows rows={6} />
+      </Panel>
+    );
+  }
+  if (query.error) {
+    return permissionOr(query.error, "manage suppliers", query.refetch);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
+          The suppliers offered when you receive a delivery or send a unit back.
+          Switching one off keeps it on past receipts and returns but drops it
+          from the pickers.
+        </p>
+        <Button size="sm" onClick={() => setDialog({ mode: "new" })}>
+          <Plus aria-hidden /> New supplier
+        </Button>
+      </div>
+
+      <Panel>
+        <PanelHeader>
+          <Truck className="size-3.5 text-ink-faint" aria-hidden />
+          <PanelTitle>Suppliers</PanelTitle>
+          <span className="mono ml-auto text-xs text-ink-faint">
+            {suppliers.length} supplier{suppliers.length === 1 ? "" : "s"}
+          </span>
+        </PanelHeader>
+
+        {suppliers.length === 0 ? (
+          <EmptyState
+            icon={Truck}
+            title="No suppliers yet."
+            body="Add the distributors and wholesalers you buy stock from, so receiving a delivery is a pick, not a type."
+          />
+        ) : (
+          <ul className="divide-y divide-rule-soft">
+            {suppliers.map((supplier) => {
+              const contact = [supplier.contactPerson, supplier.mobile, supplier.email]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={supplier.id}
+                  className="flex items-center gap-3 px-3 py-2.5 sm:px-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        "truncate text-sm",
+                        supplier.active
+                          ? "text-ink"
+                          : "text-ink-faint line-through",
+                      )}
+                    >
+                      {supplier.name}
+                    </p>
+                    {contact ? (
+                      <p className="truncate text-xs text-ink-faint">{contact}</p>
+                    ) : null}
+                  </div>
+                  {!supplier.active ? <Badge variant="ghost">off</Badge> : null}
+                  {supplier.terms ? (
+                    <span className="mono hidden text-xs text-ink-faint sm:inline">
+                      {supplier.terms}
+                    </span>
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setDialog({ mode: "edit", supplier })}
+                  >
+                    Edit
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      {dialog ? (
+        <SupplierDialog
+          supplier={dialog.mode === "edit" ? dialog.supplier : undefined}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
+            setDialog(null);
+            query.refetch();
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 

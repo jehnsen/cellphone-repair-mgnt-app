@@ -119,11 +119,20 @@ export function createUnavailableApi(): ShopApi {
     async getSuppliers() {
       return [];
     },
+    async createSupplier() {
+      throw missing("Adding a supplier", "POST /suppliers");
+    },
+    async updateSupplier() {
+      throw missing("Editing a supplier", "PATCH /suppliers/{id}");
+    },
     async getProductRefs() {
       return { categories: [], brands: [] };
     },
     async createItem() {
       throw missing("Adding an item", "POST /products");
+    },
+    async updateItem() {
+      throw missing("Editing an item", "PATCH /products/{id}");
     },
     async receiveStock() {
       throw missing("Receiving stock", "POST /goods-receipts");

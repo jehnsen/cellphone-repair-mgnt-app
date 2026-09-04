@@ -53,6 +53,7 @@ export function toSupplier(dto: SupplierDto): Supplier {
     email: dto.contact_email ?? undefined,
     address: undefined,
     terms: dto.terms ?? undefined,
+    note: dto.notes ?? undefined,
     active: dto.is_active ?? true,
   };
 }

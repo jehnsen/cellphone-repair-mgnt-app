@@ -150,6 +150,45 @@ export interface NewItemInput {
   reorderPoint: number;
 }
 
+/**
+ * Edit an existing catalog row. Only the fields passed are changed; stock is
+ * never touched here — that's receiving and adjustment. The item's class
+ * (handset vs. accessory vs. part) is fixed once units or quantity exist, so
+ * it isn't editable.
+ */
+export interface UpdateItemInput {
+  itemId: ID;
+  name?: string;
+  sku?: string;
+  /** `null` clears it. */
+  barcode?: string | null;
+  categoryId?: ID;
+  /** `null` clears it. */
+  brandId?: ID | null;
+  unitCost?: number;
+  sellingPrice?: number;
+  reorderPoint?: number;
+  /** Catalog default for the sale warranty issued when a unit sells. */
+  warrantyDays?: number;
+  active?: boolean;
+}
+
+/** A supplier the shop receives stock from. Never deleted — deactivated,
+    so past goods receipts and returns keep their supplier. */
+export interface NewSupplierInput {
+  name: string;
+  contactPerson?: string;
+  mobile?: string;
+  email?: string;
+  terms?: string;
+  note?: string;
+}
+
+export interface UpdateSupplierInput extends Partial<NewSupplierInput> {
+  id: ID;
+  active?: boolean;
+}
+
 /** The picker lists behind the new-item form. */
 export interface ProductRefs {
   categories: { id: ID; name: string }[];
@@ -506,9 +545,14 @@ export interface ShopApi {
   getItems(query?: ItemQuery): Promise<InventoryItem[]>;
   getItem(id: ID): Promise<InventoryItem>;
   getMovements(itemId?: ID): Promise<StockMovement[]>;
-  getSuppliers(): Promise<Supplier[]>;
+  /** Active suppliers only unless `includeInactive` — the receiving picker
+      wants the short list, the Settings tab wants everything. */
+  getSuppliers(opts?: { includeInactive?: boolean }): Promise<Supplier[]>;
+  createSupplier(input: NewSupplierInput): Promise<Supplier>;
+  updateSupplier(input: UpdateSupplierInput): Promise<Supplier>;
   getProductRefs(): Promise<ProductRefs>;
   createItem(input: NewItemInput): Promise<InventoryItem>;
+  updateItem(input: UpdateItemInput): Promise<InventoryItem>;
   receiveStock(input: ReceiveStockInput): Promise<InventoryItem>;
   adjustStock(input: AdjustStockInput): Promise<InventoryItem>;
 

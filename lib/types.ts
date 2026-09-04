@@ -506,6 +506,7 @@ export interface Supplier {
   email?: string;
   address?: string;
   terms?: string;
+  note?: string;
   active: boolean;
 }
 

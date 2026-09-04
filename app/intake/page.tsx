@@ -78,6 +78,10 @@ const CONDITION: { value: ConditionCheck; label: string }[] = [
 
 const WARRANTY_OPTIONS = [0, 7, 15, 30, 60, 90];
 
+/* Radix Select has no empty-string item value, so "no technician" rides a
+   sentinel and is mapped back to "" on the way out. */
+const UNASSIGNED = "__unassigned__";
+
 function todayPlus(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
@@ -98,6 +102,7 @@ export default function IntakePage() {
   const [imei, setImei] = useState("");
   const [unlockMethod, setUnlockMethod] = useState<UnlockMethod>("none");
   const [unlockValue, setUnlockValue] = useState("");
+  const [technicianId, setTechnicianId] = useState("");
 
   const [reportedProblem, setReportedProblem] = useState("");
   const [problemTags, setProblemTags] = useState<ProblemTag[]>([]);
@@ -112,6 +117,17 @@ export default function IntakePage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Ticket | null>(null);
+
+  /* The bench roster, from the unscoped `/users` read at boot — same source
+     the board's assign dialog uses. Optional at intake: a job can come in
+     unassigned and be picked up from the board later. */
+  const technicians = useMemo(
+    () =>
+      db.users
+        .filter((u) => u.isTechnician && u.active)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [db.users],
+  );
 
   /* Brands and models come from the shop's own catalog. A device the shop has
      never seen is still accepted: intake creates the brand and model on save. */
@@ -160,6 +176,7 @@ export default function IntakePage() {
     setImei("");
     setUnlockMethod("none");
     setUnlockValue("");
+    setTechnicianId("");
     setReportedProblem("");
     setProblemTags([]);
     setTurnedOver([]);
@@ -199,7 +216,7 @@ export default function IntakePage() {
         downpaymentMethod,
         promisedAt: new Date(promisedAt).toISOString(),
         warrantyDays,
-        technicianId: user.id,
+        technicianId: technicianId || undefined,
         createdBy: user.id,
       });
       setCreated(ticket);
@@ -497,6 +514,35 @@ export default function IntakePage() {
                   min={todayPlus(0)}
                   onChange={(e) => setPromisedAt(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Technician</Label>
+                <Select
+                  value={technicianId || UNASSIGNED}
+                  onValueChange={(v) =>
+                    setTechnicianId(v === UNASSIGNED ? "" : v)
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED}>
+                      Unassigned — pick up from the board
+                    </SelectItem>
+                    {technicians.map((tech) => (
+                      <SelectItem key={tech.id} value={tech.id}>
+                        {tech.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {technicians.length === 0 ? (
+                  <p className="text-xs text-ink-faint">
+                    No one on staff is flagged as a technician yet.
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
