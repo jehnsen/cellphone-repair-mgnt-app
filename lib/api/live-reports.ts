@@ -128,32 +128,17 @@ function toBucket(value: unknown): AgingBucket {
   return "0-30";
 }
 
-/**
- * The report endpoints scope by `date_from` / `date_to`; `days` alone is only
- * read by dead-stock. So a "last N days" range is turned into an explicit
- * window here — otherwise every range button collapsed to the server's 30-day
- * default. `days` is still sent for the one endpoint that wants it.
- */
-function rangeQuery(range?: { from?: string; to?: string; days?: number }) {
-  let from = range?.from;
-  let to = range?.to;
-  if (!from && !to && range?.days) {
-    const end = new Date();
-    const start = new Date(end);
-    start.setDate(start.getDate() - range.days);
-    from = start.toISOString().slice(0, 10);
-    to = end.toISOString().slice(0, 10);
-  }
-  return { date_from: from, date_to: to, days: range?.days };
-}
-
 export function createReportsApi(client: HttpClient): ShopReports {
   const fetchReport = async (
     path: string,
     range?: { from?: string; to?: string; days?: number },
   ): Promise<ReportPayload> => {
     const { data } = await client.get<ReportPayload>(path, {
-      query: rangeQuery(range),
+      query: {
+        date_from: range?.from,
+        date_to: range?.to,
+        days: range?.days,
+      },
     });
     return data ?? {};
   };
@@ -168,7 +153,11 @@ export function createReportsApi(client: HttpClient): ShopReports {
     range?: { from?: string; to?: string; days?: number },
   ): Promise<{ data: Dict; generatedAt: string }> => {
     const response = await client.get<Dict>(path, {
-      query: rangeQuery(range),
+      query: {
+        date_from: range?.from,
+        date_to: range?.to,
+        days: range?.days,
+      },
     });
     const data = obj(response.data);
     const generatedAt = String(
@@ -281,32 +270,59 @@ export function createReportsApi(client: HttpClient): ShopReports {
       }));
     },
 
-    async getReturnedTickets(range) {
-      const payload = await fetchReport("/reports/returned-tickets", range);
-      const agg = payload.aggregate ?? {};
+    async getReturnedTickets() {
+      /* Read straight off the ticket list, filtered to the two terminal
+         no-repair statuses — a comma list is an OR. Branch-scoped like every
+         other ticket read. No date window: the shop wants all of them, and
+         the list carries no filterable close date. */
+      const rows = await client.getAll<Dict>("/tickets", {
+        query: {
+          "filter[status]": "unrepairable,returned_as_is",
+          sort: "-created_at",
+        },
+      });
+
+      const mapped = rows.map((dto) => {
+        const device = obj(dto.device);
+        const takenInAt = String(dto.created_at ?? "");
+        const closedAt = String(dto.updated_at ?? dto.created_at ?? "");
+        const start = takenInAt ? Date.parse(takenInAt) : NaN;
+        const end = closedAt ? Date.parse(closedAt) : NaN;
+        const daysOpen =
+          Number.isFinite(start) && Number.isFinite(end)
+            ? Math.max(0, Math.round((end - start) / 86_400_000))
+            : 0;
+
+        return {
+          ticketId: String(dto.ulid ?? ""),
+          ticketNo: String(dto.ticket_number ?? ""),
+          status:
+            dto.status === "returned_as_is"
+              ? ("returned_as_is" as const)
+              : ("unrepairable" as const),
+          takenInAt,
+          closedAt,
+          daysOpen,
+          customerName: String(obj(dto.customer).name ?? "") || "Walk-in",
+          device:
+            [device.brand, device.model].filter(Boolean).join(" ") || "—",
+          technician: obj(dto.assigned_technician).name
+            ? String(obj(dto.assigned_technician).name)
+            : null,
+          reportedProblem: String(dto.reported_problem ?? ""),
+          downpayment: num(dto.downpayment),
+          estimatedCost: num(dto.estimated_cost),
+        };
+      });
 
       return {
-        ticketCount: num(agg.ticket_count),
-        unrepairableCount: num(agg.unrepairable_count),
-        returnedAsIsCount: num(agg.returned_as_is_count),
-        downpaymentTotal: num(agg.downpayment_total),
-        rows: (payload.rows ?? []).map((row) => ({
-          ticketId: String(row.ulid ?? ""),
-          ticketNo: String(row.ticket_number ?? ""),
-          status:
-            row.status === "returned_as_is" ? "returned_as_is" : "unrepairable",
-          closedAt: String(row.closed_at ?? ""),
-          daysOpen: num(row.days_open),
-          customerName: String(row.customer_name ?? "") || "Walk-in",
-          device: String(row.device ?? "") || "—",
-          technician: row.technician ? String(row.technician) : null,
-          reportedProblem: String(row.reported_problem ?? ""),
-          reason: row.reason ? String(row.reason) : null,
-          resolution: row.resolution ? String(row.resolution) : null,
-          rootCause: row.root_cause ? String(row.root_cause) : null,
-          downpayment: num(row.downpayment),
-          estimatedCost: num(row.estimated_cost),
-        })),
+        ticketCount: mapped.length,
+        unrepairableCount: mapped.filter((r) => r.status === "unrepairable")
+          .length,
+        returnedAsIsCount: mapped.filter((r) => r.status === "returned_as_is")
+          .length,
+        downpaymentTotal: mapped.reduce((sum, r) => sum + r.downpayment, 0),
+        rows: mapped,
       };
     },
 

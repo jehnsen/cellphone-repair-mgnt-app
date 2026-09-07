@@ -304,17 +304,15 @@ export interface ReturnedTicketRow {
   ticketId: ID;
   ticketNo: string;
   status: "unrepairable" | "returned_as_is";
-  /** ISO 8601 — when the job entered that terminal status. */
+  /** ISO 8601. */
+  takenInAt: string;
+  /** ISO 8601 — the ticket's last change, ≈ when it was closed. */
   closedAt: string;
   daysOpen: number;
   customerName: string;
   device: string;
   technician: string | null;
   reportedProblem: string;
-  /** From the recorded finding, when there is one. */
-  reason: string | null;
-  resolution: string | null;
-  rootCause: string | null;
   /** Money the customer had already put down on the job. */
   downpayment: number;
   estimatedCost: number;
@@ -540,9 +538,11 @@ export interface ShopReports {
   getRefundsVoids(range?: ReportRange): Promise<RefundsVoids>;
   getReceivablesAging(): Promise<ReceivablesAging>;
 
-  /** Jobs that closed without a repair in the window — unrepairable, or
-      handed back to the customer as-is. Needs `reports.view`. */
-  getReturnedTickets(range?: ReportRange): Promise<ReturnedTickets>;
+  /** Every job that closed without a repair — unrepairable, or handed back to
+      the customer as-is. A snapshot, not date-windowed. Reads the ticket list
+      filtered to those statuses, so it is branch-scoped like any ticket read
+      and needs `tickets.view`. */
+  getReturnedTickets(): Promise<ReturnedTickets>;
 }
 
 /** Everything a screen can ask of the shop. A fetch client implements this. */

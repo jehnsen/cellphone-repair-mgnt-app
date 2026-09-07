@@ -174,7 +174,7 @@ export function ReportsView() {
 
         {/* One filter row, scoping the range-based tabs below it. */}
         <div className="flex flex-wrap items-center gap-2 pt-4">
-          {tab === "receivables" ? (
+          {tab === "receivables" || tab === "returned" ? (
             <p className="text-xs text-ink-soft">
               A snapshot as of now — no date window.
             </p>
@@ -223,7 +223,7 @@ export function ReportsView() {
         </TabsContent>
 
         <TabsContent value="returned" className="pt-4">
-          <ReturnedJobsTab days={days} rangeKey={range} />
+          <ReturnedJobsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -1359,42 +1359,33 @@ const RETURNED_STATUS_LABEL: Record<string, string> = {
   returned_as_is: "Returned as-is",
 };
 
-function ReturnedJobsTab({
-  days,
-  rangeKey,
-}: {
-  days: number;
-  rangeKey: RangeKey;
-}) {
-  const report = useReport(
-    (reports) => reports.getReturnedTickets({ days }),
-    [days],
-  );
+function ReturnedJobsTab() {
+  const report = useReport((reports) => reports.getReturnedTickets());
   const d = report.data;
 
   const exportRows = () =>
-    downloadCsv(`returned-jobs-${rangeKey}d.csv`, (d?.rows ?? []).map((row) => ({
-      ticket: row.ticketNo,
-      status: RETURNED_STATUS_LABEL[row.status] ?? row.status,
-      closed: formatDate(row.closedAt),
-      days_open: String(row.daysOpen),
-      customer: row.customerName,
-      device: row.device,
-      technician: row.technician ?? "",
-      reason:
-        (row.resolution ? humanize(row.resolution) : "") ||
-        row.reason ||
-        row.reportedProblem,
-      downpayment: row.downpayment.toFixed(2),
-      estimate: row.estimatedCost.toFixed(2),
-    })));
+    downloadCsv(
+      "returned-jobs.csv",
+      (d?.rows ?? []).map((row) => ({
+        ticket: row.ticketNo,
+        outcome: RETURNED_STATUS_LABEL[row.status] ?? row.status,
+        taken_in: formatDate(row.takenInAt),
+        closed: formatDate(row.closedAt),
+        days_open: String(row.daysOpen),
+        customer: row.customerName,
+        device: row.device,
+        technician: row.technician ?? "",
+        reported_problem: row.reportedProblem,
+        downpayment: row.downpayment.toFixed(2),
+        estimate: row.estimatedCost.toFixed(2),
+      })),
+    );
 
   return (
     <div className="space-y-4 sm:space-y-5">
       <ReportNote>
-        Jobs that closed without a repair in the window — the unit was
-        unrepairable, or handed back to the customer as-is (quote declined, no
-        fault found). Dated by when the job closed, not when it came in. The
+        Every job that closed without a repair — the unit was unrepairable, or
+        handed back to the customer as-is (quote declined, no fault found). The
         downpayment column is money the customer had already put down.
       </ReportNote>
 
@@ -1402,7 +1393,6 @@ function ReturnedJobsTab({
         <StatTile
           label="Returned jobs"
           value={count(d?.ticketCount ?? 0)}
-          hint={`Last ${days} days`}
           state={report}
         />
         <StatTile
@@ -1448,7 +1438,7 @@ function ReturnedJobsTab({
           <EmptyState
             icon={PackageX}
             title="No returned jobs."
-            body={`Every job that closed in the last ${days} days ended in a repair.`}
+            body="Every job on the board so far has ended in a repair."
           />
         ) : (
           <PanelScroller>
@@ -1462,55 +1452,46 @@ function ReturnedJobsTab({
                   <TableHead>Customer</TableHead>
                   <TableHead>Device</TableHead>
                   <TableHead>Technician</TableHead>
-                  <TableHead>Why</TableHead>
+                  <TableHead>Reported problem</TableHead>
                   <TableHead className="text-right">Downpayment</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {d.rows.map((row) => {
-                  const why =
-                    (row.resolution ? humanize(row.resolution) : "") ||
-                    row.reason ||
-                    row.reportedProblem ||
-                    "—";
-                  return (
-                    <TableRow key={row.ticketId || row.ticketNo}>
-                      <TableCell className="mono text-xs font-semibold">
-                        {row.ticketNo}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            row.status === "unrepairable" ? "stamp" : "outline"
-                          }
-                        >
-                          {RETURNED_STATUS_LABEL[row.status] ?? row.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="mono text-xs text-ink-soft">
-                        {formatDate(row.closedAt)}
-                      </TableCell>
-                      <TableNumeric className="text-ink-soft">
-                        {row.daysOpen}d
-                      </TableNumeric>
-                      <TableCell className="truncate">
-                        {row.customerName}
-                      </TableCell>
-                      <TableCell className="truncate text-ink-soft">
-                        {row.device}
-                      </TableCell>
-                      <TableCell className="truncate text-ink-soft">
-                        {row.technician ?? "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[22ch] truncate text-ink-soft">
-                        {why}
-                      </TableCell>
-                      <TableNumeric className="font-medium">
-                        {row.downpayment > 0 ? peso(row.downpayment) : "—"}
-                      </TableNumeric>
-                    </TableRow>
-                  );
-                })}
+                {d.rows.map((row) => (
+                  <TableRow key={row.ticketId || row.ticketNo}>
+                    <TableCell className="mono text-xs font-semibold">
+                      {row.ticketNo}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          row.status === "unrepairable" ? "stamp" : "outline"
+                        }
+                      >
+                        {RETURNED_STATUS_LABEL[row.status] ?? row.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="mono text-xs text-ink-soft">
+                      {formatDate(row.closedAt)}
+                    </TableCell>
+                    <TableNumeric className="text-ink-soft">
+                      {row.daysOpen}d
+                    </TableNumeric>
+                    <TableCell className="truncate">{row.customerName}</TableCell>
+                    <TableCell className="truncate text-ink-soft">
+                      {row.device}
+                    </TableCell>
+                    <TableCell className="truncate text-ink-soft">
+                      {row.technician ?? "—"}
+                    </TableCell>
+                    <TableCell className="max-w-[24ch] truncate text-ink-soft">
+                      {row.reportedProblem || "—"}
+                    </TableCell>
+                    <TableNumeric className="font-medium">
+                      {row.downpayment > 0 ? peso(row.downpayment) : "—"}
+                    </TableNumeric>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </PanelScroller>
