@@ -128,17 +128,32 @@ function toBucket(value: unknown): AgingBucket {
   return "0-30";
 }
 
+/**
+ * The report endpoints scope by `date_from` / `date_to`; `days` alone is only
+ * read by dead-stock. So a "last N days" range is turned into an explicit
+ * window here — otherwise every range button collapsed to the server's 30-day
+ * default. `days` is still sent for the one endpoint that wants it.
+ */
+function rangeQuery(range?: { from?: string; to?: string; days?: number }) {
+  let from = range?.from;
+  let to = range?.to;
+  if (!from && !to && range?.days) {
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - range.days);
+    from = start.toISOString().slice(0, 10);
+    to = end.toISOString().slice(0, 10);
+  }
+  return { date_from: from, date_to: to, days: range?.days };
+}
+
 export function createReportsApi(client: HttpClient): ShopReports {
   const fetchReport = async (
     path: string,
     range?: { from?: string; to?: string; days?: number },
   ): Promise<ReportPayload> => {
     const { data } = await client.get<ReportPayload>(path, {
-      query: {
-        date_from: range?.from,
-        date_to: range?.to,
-        days: range?.days,
-      },
+      query: rangeQuery(range),
     });
     return data ?? {};
   };
@@ -153,11 +168,7 @@ export function createReportsApi(client: HttpClient): ShopReports {
     range?: { from?: string; to?: string; days?: number },
   ): Promise<{ data: Dict; generatedAt: string }> => {
     const response = await client.get<Dict>(path, {
-      query: {
-        date_from: range?.from,
-        date_to: range?.to,
-        days: range?.days,
-      },
+      query: rangeQuery(range),
     });
     const data = obj(response.data);
     const generatedAt = String(
@@ -268,6 +279,35 @@ export function createReportsApi(client: HttpClient): ShopReports {
         status: toStatus(row.status, "ready_for_pickup"),
         balance: num(row.balance ?? row.balance_due),
       }));
+    },
+
+    async getReturnedTickets(range) {
+      const payload = await fetchReport("/reports/returned-tickets", range);
+      const agg = payload.aggregate ?? {};
+
+      return {
+        ticketCount: num(agg.ticket_count),
+        unrepairableCount: num(agg.unrepairable_count),
+        returnedAsIsCount: num(agg.returned_as_is_count),
+        downpaymentTotal: num(agg.downpayment_total),
+        rows: (payload.rows ?? []).map((row) => ({
+          ticketId: String(row.ulid ?? ""),
+          ticketNo: String(row.ticket_number ?? ""),
+          status:
+            row.status === "returned_as_is" ? "returned_as_is" : "unrepairable",
+          closedAt: String(row.closed_at ?? ""),
+          daysOpen: num(row.days_open),
+          customerName: String(row.customer_name ?? "") || "Walk-in",
+          device: String(row.device ?? "") || "—",
+          technician: row.technician ? String(row.technician) : null,
+          reportedProblem: String(row.reported_problem ?? ""),
+          reason: row.reason ? String(row.reason) : null,
+          resolution: row.resolution ? String(row.resolution) : null,
+          rootCause: row.root_cause ? String(row.root_cause) : null,
+          downpayment: num(row.downpayment),
+          estimatedCost: num(row.estimated_cost),
+        })),
+      };
     },
 
     /* ── Counter finance ─────────────────────────────────────────────── */

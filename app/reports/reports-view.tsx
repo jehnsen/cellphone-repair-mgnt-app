@@ -15,6 +15,7 @@ import {
   Clock,
   Download,
   HandCoins,
+  PackageX,
   Table2,
   TrendingUp,
   TriangleAlert,
@@ -65,7 +66,14 @@ const RANGES = [
 
 type RangeKey = (typeof RANGES)[number]["key"];
 
-const TABS = ["overview", "repair-pnl", "cash", "refunds", "receivables"] as const;
+const TABS = [
+  "overview",
+  "repair-pnl",
+  "cash",
+  "refunds",
+  "receivables",
+  "returned",
+] as const;
 type TabKey = (typeof TABS)[number];
 
 /** Identity is fixed per entity, never reassigned by rank. */
@@ -159,6 +167,9 @@ export function ReportsView() {
           <TabsTrigger value="receivables">
             <HandCoins aria-hidden /> Receivables
           </TabsTrigger>
+          <TabsTrigger value="returned">
+            <PackageX aria-hidden /> Returned jobs
+          </TabsTrigger>
         </TabsList>
 
         {/* One filter row, scoping the range-based tabs below it. */}
@@ -209,6 +220,10 @@ export function ReportsView() {
 
         <TabsContent value="receivables" className="pt-4">
           <ReceivablesTab />
+        </TabsContent>
+
+        <TabsContent value="returned" className="pt-4">
+          <ReturnedJobsTab days={days} rangeKey={range} />
         </TabsContent>
       </Tabs>
     </div>
@@ -1328,6 +1343,174 @@ function ReceivablesTab() {
                     </TableNumeric>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          </PanelScroller>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+/* ── Returned jobs (unrepairable / returned as-is) ───────────────────── */
+
+const RETURNED_STATUS_LABEL: Record<string, string> = {
+  unrepairable: "Unrepairable",
+  returned_as_is: "Returned as-is",
+};
+
+function ReturnedJobsTab({
+  days,
+  rangeKey,
+}: {
+  days: number;
+  rangeKey: RangeKey;
+}) {
+  const report = useReport(
+    (reports) => reports.getReturnedTickets({ days }),
+    [days],
+  );
+  const d = report.data;
+
+  const exportRows = () =>
+    downloadCsv(`returned-jobs-${rangeKey}d.csv`, (d?.rows ?? []).map((row) => ({
+      ticket: row.ticketNo,
+      status: RETURNED_STATUS_LABEL[row.status] ?? row.status,
+      closed: formatDate(row.closedAt),
+      days_open: String(row.daysOpen),
+      customer: row.customerName,
+      device: row.device,
+      technician: row.technician ?? "",
+      reason:
+        (row.resolution ? humanize(row.resolution) : "") ||
+        row.reason ||
+        row.reportedProblem,
+      downpayment: row.downpayment.toFixed(2),
+      estimate: row.estimatedCost.toFixed(2),
+    })));
+
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      <ReportNote>
+        Jobs that closed without a repair in the window — the unit was
+        unrepairable, or handed back to the customer as-is (quote declined, no
+        fault found). Dated by when the job closed, not when it came in. The
+        downpayment column is money the customer had already put down.
+      </ReportNote>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label="Returned jobs"
+          value={count(d?.ticketCount ?? 0)}
+          hint={`Last ${days} days`}
+          state={report}
+        />
+        <StatTile
+          label="Unrepairable"
+          value={count(d?.unrepairableCount ?? 0)}
+          state={report}
+        />
+        <StatTile
+          label="Returned as-is"
+          value={count(d?.returnedAsIsCount ?? 0)}
+          state={report}
+        />
+        <StatTile
+          label="Downpayments held"
+          value={peso(d?.downpaymentTotal ?? 0, { whole: true })}
+          hint="On jobs that produced nothing"
+          state={report}
+        />
+      </div>
+
+      <Panel>
+        <PanelHeader>
+          <PackageX className="size-3.5 text-ink-faint" aria-hidden />
+          <PanelTitle>Jobs closed without a repair</PanelTitle>
+          <Button
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            onClick={exportRows}
+            disabled={!d?.rows.length}
+          >
+            <Download aria-hidden /> CSV
+          </Button>
+        </PanelHeader>
+
+        {report.error ? (
+          <PanelBody>
+            <ErrorState error={report.error} onRetry={report.refetch} />
+          </PanelBody>
+        ) : report.loading ? (
+          <LoadingRows rows={5} />
+        ) : !d?.rows.length ? (
+          <EmptyState
+            icon={PackageX}
+            title="No returned jobs."
+            body={`Every job that closed in the last ${days} days ended in a repair.`}
+          />
+        ) : (
+          <PanelScroller>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ticket</TableHead>
+                  <TableHead>Outcome</TableHead>
+                  <TableHead>Closed</TableHead>
+                  <TableHead className="text-right">Open</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Device</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead>Why</TableHead>
+                  <TableHead className="text-right">Downpayment</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {d.rows.map((row) => {
+                  const why =
+                    (row.resolution ? humanize(row.resolution) : "") ||
+                    row.reason ||
+                    row.reportedProblem ||
+                    "—";
+                  return (
+                    <TableRow key={row.ticketId || row.ticketNo}>
+                      <TableCell className="mono text-xs font-semibold">
+                        {row.ticketNo}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            row.status === "unrepairable" ? "stamp" : "outline"
+                          }
+                        >
+                          {RETURNED_STATUS_LABEL[row.status] ?? row.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="mono text-xs text-ink-soft">
+                        {formatDate(row.closedAt)}
+                      </TableCell>
+                      <TableNumeric className="text-ink-soft">
+                        {row.daysOpen}d
+                      </TableNumeric>
+                      <TableCell className="truncate">
+                        {row.customerName}
+                      </TableCell>
+                      <TableCell className="truncate text-ink-soft">
+                        {row.device}
+                      </TableCell>
+                      <TableCell className="truncate text-ink-soft">
+                        {row.technician ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[22ch] truncate text-ink-soft">
+                        {why}
+                      </TableCell>
+                      <TableNumeric className="font-medium">
+                        {row.downpayment > 0 ? peso(row.downpayment) : "—"}
+                      </TableNumeric>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </PanelScroller>

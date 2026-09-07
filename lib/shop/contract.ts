@@ -299,6 +299,35 @@ export interface ReportRange {
   days?: number;
 }
 
+/** A job that closed without a repair — see `getReturnedTickets`. */
+export interface ReturnedTicketRow {
+  ticketId: ID;
+  ticketNo: string;
+  status: "unrepairable" | "returned_as_is";
+  /** ISO 8601 — when the job entered that terminal status. */
+  closedAt: string;
+  daysOpen: number;
+  customerName: string;
+  device: string;
+  technician: string | null;
+  reportedProblem: string;
+  /** From the recorded finding, when there is one. */
+  reason: string | null;
+  resolution: string | null;
+  rootCause: string | null;
+  /** Money the customer had already put down on the job. */
+  downpayment: number;
+  estimatedCost: number;
+}
+
+export interface ReturnedTickets {
+  ticketCount: number;
+  unrepairableCount: number;
+  returnedAsIsCount: number;
+  downpaymentTotal: number;
+  rows: ReturnedTicketRow[];
+}
+
 /**
  * Revenue split by what was sold. The reports screen plots these as three
  * series, so the split has to come from the same SQL as the totals — deriving
@@ -510,6 +539,10 @@ export interface ShopReports {
   getCashReconciliation(range?: ReportRange): Promise<CashReconciliation>;
   getRefundsVoids(range?: ReportRange): Promise<RefundsVoids>;
   getReceivablesAging(): Promise<ReceivablesAging>;
+
+  /** Jobs that closed without a repair in the window — unrepairable, or
+      handed back to the customer as-is. Needs `reports.view`. */
+  getReturnedTickets(range?: ReportRange): Promise<ReturnedTickets>;
 }
 
 /** Everything a screen can ask of the shop. A fetch client implements this. */
