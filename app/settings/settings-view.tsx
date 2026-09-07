@@ -468,6 +468,7 @@ function draftFromBranch(branch: BranchProfile): BranchDraft {
     tin: branch.tin,
     birPermitNo: branch.birPermitNo,
     vatRegistered: String(branch.vatRegistered),
+    offersRepairs: String(branch.offersRepairs),
     receiptHeaderText: branch.receiptHeaderText,
     receiptFooterText: branch.receiptFooterText,
   };
@@ -508,8 +509,11 @@ function BranchTab() {
     if (!branch || !current || dirtyKeys.length === 0) return;
     const patch: BranchPatch = {};
     for (const key of dirtyKeys) {
-      if (key === "vatRegistered") patch.vatRegistered = current.vatRegistered === "true";
-      else patch[key] = current[key];
+      if (key === "vatRegistered" || key === "offersRepairs") {
+        patch[key] = current[key] === "true";
+      } else {
+        patch[key] = current[key];
+      }
     }
 
     const { data, error } = await save.mutate(patch);
@@ -609,6 +613,18 @@ function BranchTab() {
             VAT-registered
             <span className="text-xs text-ink-faint">
               — changes receipt layout and how the senior/PWD discount is computed.
+            </span>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-ink sm:col-span-2">
+            <Switch
+              checked={current.offersRepairs === "true"}
+              onCheckedChange={(on) => set("offersRepairs", on ? "true" : "false")}
+            />
+            Offers repairs
+            <span className="text-xs text-ink-faint">
+              — off makes this a sales-only floor: intake, the repair board,
+              release and the repair reports drop off its menu.
             </span>
           </label>
         </PanelBody>

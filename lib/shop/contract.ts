@@ -944,6 +944,7 @@ export type BranchPatch = Partial<
     | "tin"
     | "birPermitNo"
     | "vatRegistered"
+    | "offersRepairs"
     | "receiptHeaderText"
     | "receiptFooterText"
   >

@@ -20,6 +20,8 @@ export interface NavItem {
   permission: Permission | null;
   /** Shown in the rail as a running count when the shell can compute one. */
   badge?: "overdue" | "ready" | "lowStock";
+  /** Hidden on a branch that does not offer repairs (a sales-only floor). */
+  repairOnly?: boolean;
 }
 
 export interface NavSection {
@@ -33,9 +35,9 @@ export const NAV: NavSection[] = [
     title: "Counter",
     items: [
       { href: "/", label: "Dashboard", icon: Gauge, permission: null },
-      { href: "/intake", label: "New job order", icon: ClipboardPen, permission: "ticket.create" },
-      { href: "/board", label: "Repair board", icon: Columns3, permission: null, badge: "overdue" },
-      { href: "/release", label: "Release", icon: PackageCheck, permission: "ticket.release", badge: "ready" },
+      { href: "/intake", label: "New job order", icon: ClipboardPen, permission: "ticket.create", repairOnly: true },
+      { href: "/board", label: "Repair board", icon: Columns3, permission: null, badge: "overdue", repairOnly: true },
+      { href: "/release", label: "Release", icon: PackageCheck, permission: "ticket.release", badge: "ready", repairOnly: true },
       { href: "/pos", label: "Point of sale", icon: ScanBarcode, permission: "pos.sell" },
     ],
   },

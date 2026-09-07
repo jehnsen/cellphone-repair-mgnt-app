@@ -39,6 +39,14 @@ export function NavRail({
   const isActive = (item: NavItem) =>
     item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 
+  /* A sales-only branch has no repair bench, so the repair items drop off its
+     menu. Resolved against the branch in view, then the user's own; if
+     neither is known, keep them (fail open). */
+  const offersRepairs =
+    branches.find((b) => b.id === branchScope)?.offersRepairs ??
+    branches.find((b) => b.id === user.branchId)?.offersRepairs ??
+    true;
+
   /* The collapsed mark carries the branch the app is pointed at — the scoped
      branch's code, or the user's own when the view spans every branch. */
   const branchCode = (
@@ -89,7 +97,9 @@ export function NavRail({
       <div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden">
         {NAV.map((section) => {
           const items = section.items.filter(
-            (item) => item.permission === null || can(item.permission),
+            (item) =>
+              (item.permission === null || can(item.permission)) &&
+              (!item.repairOnly || offersRepairs),
           );
           if (!items.length) return null;
 

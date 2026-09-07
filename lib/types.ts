@@ -869,6 +869,9 @@ export interface BranchProfile {
   tin: string;
   birPermitNo: string;
   vatRegistered: boolean;
+  /** A sales-only floor has no repair bench — the app hides intake, the
+      board, release and the repair reports for it. */
+  offersRepairs: boolean;
   receiptHeaderText: string;
   receiptFooterText: string;
   timezone: string;

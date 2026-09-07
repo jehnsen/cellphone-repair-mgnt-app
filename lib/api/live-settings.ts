@@ -119,6 +119,12 @@ export function createSettingsApi(
       if (patch.vatRegistered !== undefined) {
         body.vat_registered = patch.vatRegistered;
       }
+      /* `type` and `offers_repairs` travel together — the same pairing
+         `updateBranchById` keeps. */
+      if (patch.offersRepairs !== undefined) {
+        body.type = patch.offersRepairs ? "repair_and_sales" : "sales_only";
+        body.offers_repairs = patch.offersRepairs;
+      }
 
       const { data } = await client.patch<BranchDto>(
         `/branches/${branchUlid()}`,

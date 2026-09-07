@@ -21,10 +21,19 @@ export function MobileNav({
   onOpenMore: () => void;
 }) {
   const pathname = usePathname();
-  const { can } = useShop();
+  const { can, branches, branchScope, user } = useShop();
+
+  const offersRepairs =
+    branches.find((b) => b.id === branchScope)?.offersRepairs ??
+    branches.find((b) => b.id === user.branchId)?.offersRepairs ??
+    true;
 
   const primary = NAV.flatMap((section) => section.items)
-    .filter((item) => item.permission === null || can(item.permission))
+    .filter(
+      (item) =>
+        (item.permission === null || can(item.permission)) &&
+        (!item.repairOnly || offersRepairs),
+    )
     .slice(0, 4);
 
   return (

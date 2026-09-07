@@ -571,6 +571,7 @@ export function toBranchProfile(dto: BranchDto): BranchProfile {
     tin: dto.tin ?? "",
     birPermitNo: dto.bir_permit_no ?? "",
     vatRegistered: dto.vat_registered ?? false,
+    offersRepairs: dto.offers_repairs ?? dto.type !== "sales_only",
     receiptHeaderText: dto.receipt_header_text ?? "",
     receiptFooterText: dto.receipt_footer_text ?? "",
     timezone: dto.timezone ?? "Asia/Manila",
