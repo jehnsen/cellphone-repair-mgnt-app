@@ -34,10 +34,20 @@ export function NavRail({
   onNavigate,
 }: NavRailProps) {
   const pathname = usePathname();
-  const { can, db } = useShop();
+  const { can, db, branches, branchScope, user } = useShop();
 
   const isActive = (item: NavItem) =>
     item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+
+  /* The collapsed mark carries the branch the app is pointed at — the scoped
+     branch's code, or the user's own when the view spans every branch. */
+  const branchCode = (
+    branches.find((b) => b.id === branchScope)?.code ??
+    user.branchCode ??
+    "JO"
+  )
+    .slice(0, 4)
+    .toUpperCase();
 
   return (
     <nav
@@ -56,7 +66,7 @@ export function NavRail({
         >
           {collapsed ? (
             <span className="brandmark notch [--notch-edge:transparent] mono grid size-9 place-items-center text-[0.6875rem] font-semibold">
-              JO
+              {branchCode}
             </span>
           ) : (
             <span className="flex items-center gap-2.5">
