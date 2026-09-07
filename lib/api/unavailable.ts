@@ -47,6 +47,9 @@ export function createUnavailableApi(): ShopApi {
     async updateCustomer() {
       throw missing("Updating a customer", "PATCH /customers/{id}");
     },
+    async deleteCustomer() {
+      throw missing("Deleting a customer", "DELETE /customers/{id}");
+    },
     async getStoreCredit() {
       return { customerId: "", balance: 0, ledger: [] };
     },

@@ -61,6 +61,7 @@ const MUTATIONS = new Set<keyof ShopApi>([
   "addNote",
   "createCustomer",
   "updateCustomer",
+  "deleteCustomer",
   "adjustStoreCredit",
   "createDeviceBrand",
   "updateDeviceBrand",
@@ -209,6 +210,12 @@ function wrap(
         result
       ) {
         deps.dispatchQuiet({ type: "upsertCustomer", customer: result as Customer });
+      }
+      /* Same reason in reverse: `deleteCustomer` resolves to nothing, so the
+         id has to come off the call itself or the row stays in the directory
+         until a reload. */
+      if (method === "deleteCustomer" && typeof args[0] === "string") {
+        deps.dispatchQuiet({ type: "removeCustomer", customerId: args[0] });
       }
       /* POS reads `db.services` directly (no `useQuery`), so a service created
          at the counter has to land in the cache for the picker to see it this

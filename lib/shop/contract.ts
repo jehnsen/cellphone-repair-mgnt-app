@@ -523,6 +523,13 @@ export interface ShopApi {
   getCustomer(id: ID): Promise<Customer>;
   createCustomer(input: Omit<Customer, "id" | "createdAt">): Promise<Customer>;
   updateCustomer(input: { id: ID } & Partial<Omit<Customer, "id" | "createdAt">>): Promise<Customer>;
+  /**
+   * Soft-deletes on the server, like `deleteUser`: the row survives, so the
+   * tickets and sales filed against this customer keep their owner — it just
+   * stops appearing in the directory and the pickers. Needs
+   * `customers.manage`, which every role but technician holds.
+   */
+  deleteCustomer(id: ID): Promise<void>;
 
   /* ── Store credit ─────────────────────────────────────────────────
      Shop-wide balance plus the most recent ledger entries, newest

@@ -649,6 +649,10 @@ export function createLiveApi(
       return toCustomer(data);
     },
 
+    async deleteCustomer(id) {
+      await client.delete(`/customers/${id}`);
+    },
+
     /* ── Store credit ──────────────────────────────────────────────── */
 
     async getStoreCredit(customerId) {

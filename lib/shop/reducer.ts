@@ -26,6 +26,7 @@ export type ShopAction =
   | { type: "upsertTicket"; ticket: Ticket }
   | { type: "appendEvents"; events: TimelineEvent[] }
   | { type: "upsertCustomer"; customer: Customer }
+  | { type: "removeCustomer"; customerId: string }
   | { type: "upsertItem"; item: InventoryItem }
   | { type: "appendMovements"; movements: StockMovement[] }
   | { type: "upsertSale"; sale: Sale }
@@ -68,6 +69,15 @@ export function shopReducer(state: Database, action: ShopAction): Database {
       };
     case "upsertCustomer":
       return { ...state, customers: upsert(state.customers, action.customer) };
+    /* The directory renders straight off `db.customers`, so a soft delete has
+       to leave the cache too — a version bump alone refetches nothing here.
+       Tickets and sales keep their `customerId`: the server's row survives, and
+       those screens resolve a missing customer as a walk-in. */
+    case "removeCustomer":
+      return {
+        ...state,
+        customers: state.customers.filter((row) => row.id !== action.customerId),
+      };
     case "upsertItem":
       return { ...state, items: upsert(state.items, action.item) };
     case "appendMovements":

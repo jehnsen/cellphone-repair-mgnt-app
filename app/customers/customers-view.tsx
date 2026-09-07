@@ -12,6 +12,7 @@ import {
   Search,
   ShieldCheck,
   Smartphone,
+  Trash2,
   UserPlus,
   Users,
   Wallet,
@@ -50,6 +51,7 @@ export function CustomersView() {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Customer | null>(null);
   const [creating, setCreating] = useState(false);
+  const [removing, setRemoving] = useState<Customer | null>(null);
 
   /* Selection is carried in the URL (`/customers?c=<id>`) so "View history"
      from a ticket lands on the right person and the choice survives a reload
@@ -178,6 +180,7 @@ export function CustomersView() {
             customer={selected}
             onBack={() => setSelectedId(null)}
             onEdit={() => setEditing(selected)}
+            onDelete={() => setRemoving(selected)}
           />
         ) : (
           <Panel className="hidden lg:flex">
@@ -200,6 +203,20 @@ export function CustomersView() {
           onCreated={(customer) => setSelectedId(customer.id)}
         />
       ) : null}
+
+      {removing ? (
+        <DeleteCustomerDialog
+          customer={removing}
+          onClose={() => setRemoving(null)}
+          onDeleted={() => {
+            setRemoving(null);
+            /* The row is gone from the directory, so the detail pane has
+               nothing left to show — drop `?c=` rather than leave the URL
+               pointing at a customer that no longer resolves. */
+            setSelectedId(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -210,10 +227,12 @@ function CustomerDetail({
   customer,
   onBack,
   onEdit,
+  onDelete,
 }: {
   customer: Customer;
   onBack: () => void;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   const { db } = useShop();
 
@@ -295,9 +314,19 @@ function CustomerDetail({
               Customer since {formatDate(customer.createdAt)}
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil aria-hidden /> Edit
-          </Button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Pencil aria-hidden /> Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Delete ${customer.name}`}
+              onClick={onDelete}
+            >
+              <Trash2 aria-hidden />
+            </Button>
+          </div>
         </PanelBody>
 
         <div className="grid grid-cols-2 divide-x divide-rule-soft border-t border-rule-soft sm:grid-cols-4">
@@ -722,6 +751,85 @@ function Stat({
         {value}
       </p>
     </div>
+  );
+}
+
+/* ── Delete ──────────────────────────────────────────────────────────── */
+
+/**
+ * A soft delete on the server, so nothing is actually destroyed — but the
+ * person disappears from the directory and the intake picker, and that is
+ * worth a second look when they still have a unit on the bench or money
+ * owing. Both are read from the cache, which is what the detail pane counts
+ * from too.
+ */
+function DeleteCustomerDialog({
+  customer,
+  onClose,
+  onDeleted,
+}: {
+  customer: Customer;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const { db } = useShop();
+  const remove = useMutation((api, id: string) => api.deleteCustomer(id));
+
+  const tickets = db.tickets.filter((t) => t.customerId === customer.id);
+  const openTickets = tickets.filter((t) => stageOf(t.status) !== "closed");
+  const outstanding = tickets.reduce((sum, t) => sum + Math.max(0, t.balance), 0);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete {customer.name}?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm leading-relaxed text-ink-soft">
+          They leave the customer directory and the intake picker. Their job
+          orders and sales are untouched and keep their name.
+        </p>
+        {openTickets.length || outstanding > 0 ? (
+          <p className="rounded-sm border border-flag/40 bg-flag-fill px-3 py-2 text-sm leading-relaxed text-flag-ink">
+            {openTickets.length ? (
+              <>
+                {openTickets.length} job order
+                {openTickets.length === 1 ? " is" : "s are"} still open.
+              </>
+            ) : null}
+            {openTickets.length && outstanding > 0 ? " " : null}
+            {outstanding > 0 ? (
+              <>{peso(outstanding)} is still owing.</>
+            ) : null}{" "}
+            Settle that first if the unit has not been handed back.
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="outline" onClick={onClose} disabled={remove.pending}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={remove.pending}
+            onClick={async () => {
+              const { error } = await remove.mutate(customer.id);
+              if (error) {
+                const { message, description } = toastError(
+                  error,
+                  "Could not delete this customer.",
+                );
+                toast.error(message, { description });
+                return;
+              }
+              toast.success(`${customer.name} deleted.`);
+              onDeleted();
+            }}
+          >
+            {remove.pending ? "Deleting…" : "Delete"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
