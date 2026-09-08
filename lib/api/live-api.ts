@@ -22,6 +22,9 @@ import type {
   UserDto,
   RepairFindingDto,
   StoreCreditDto,
+  DevicePartDto,
+  IssueCatalogDto,
+  DiagnosisSnapshotDto,
 } from "@/lib/api/dto";
 import { toTicketPayment } from "@/lib/api/mappers-commerce";
 import {
@@ -37,6 +40,9 @@ import {
   toDeviceBrand,
   toDeviceModel,
   toServiceItem,
+  toDevicePart,
+  toIssueCatalog,
+  toDiagnosisSnapshot,
 } from "@/lib/api/mappers";
 import type {
   DeviceCatalog,
@@ -553,6 +559,48 @@ export function createLiveApi(
         if (caught instanceof ApiError && caught.code === "NOT_FOUND") return null;
         throw caught;
       }
+    },
+
+    /* ── The diagnosis visualizer ────────────────────────────────────
+       Shop-wide reference data, so no branch scoping (see BRANCH_AGNOSTIC
+       in http.ts) and no paging — the rig is fifteen rows. */
+
+    async getDeviceParts() {
+      const { data } = await client.get<DevicePartDto[]>("/device-parts");
+      return (data ?? []).map(toDevicePart);
+    },
+
+    async getIssueCatalog() {
+      const { data } = await client.get<IssueCatalogDto>("/issue-types");
+      return toIssueCatalog(data ?? {});
+    },
+
+    async getDiagnosisSnapshots(ticketId) {
+      const { data } = await client.get<DiagnosisSnapshotDto[]>(
+        `/tickets/${ticketId}/diagnosis-snapshots`,
+      );
+      return (data ?? []).map(toDiagnosisSnapshot);
+    },
+
+    async saveDiagnosisSnapshot({ ticketId, image, ...state }) {
+      /* Multipart, matching the ticket-photo upload: the image is binary by
+         the time it gets here, and the API takes it as a file rather than a
+         base64 string in a JSON body. Multipart carries everything as text,
+         so the two array fields and the camera go over as JSON strings —
+         the request decodes them before validating. */
+      const form = new FormData();
+      form.append("image", image, "diagnosis.png");
+      form.append("issue_source", state.issueSource);
+      form.append("issue_keys", JSON.stringify(state.issueKeys));
+      form.append("part_keys", JSON.stringify(state.partKeys));
+      if (state.camera) form.append("camera", JSON.stringify(state.camera));
+      if (state.note?.trim()) form.append("note", state.note.trim());
+
+      const { data } = await client.post<DiagnosisSnapshotDto>(
+        `/tickets/${ticketId}/diagnosis-snapshots`,
+        { body: form },
+      );
+      return toDiagnosisSnapshot(data);
     },
 
     async saveFinding({ ticketId, ...input }) {

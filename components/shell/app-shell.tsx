@@ -12,8 +12,21 @@ import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "jo.railCollapsed";
 
-/** Routes that own the whole viewport and get no nav rail or shift strip. */
-const BARE_ROUTES = ["/login"];
+/**
+ * Routes that own the whole viewport and get no nav rail or shift strip.
+ *
+ * `/verify` is here for a second reason beyond chrome: it is the link the shop
+ * sends a customer, so the person opening it has no session and never will.
+ * It must not be redirected to /login, and it must render before `ready`.
+ * Matched as a prefix because the token is in the path.
+ */
+const BARE_ROUTES = ["/login", "/verify"];
+
+function isBareRoute(pathname: string): boolean {
+  return BARE_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { ready, auth, authError, apiBaseUrl, retry } = useShop();
@@ -29,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   /* No token means there is nothing to show, so go and get one. */
   useEffect(() => {
-    if (auth === "signed-out" && !BARE_ROUTES.includes(pathname)) {
+    if (auth === "signed-out" && !isBareRoute(pathname)) {
       router.replace("/login");
     }
   }, [auth, pathname, router]);
@@ -47,8 +60,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     lowStock: summary?.lowStock ?? 0,
   };
 
-  /* Login owns its viewport and its own loading copy. */
-  if (BARE_ROUTES.includes(pathname)) {
+  /* Login and the customer-facing verify link own their viewport and their
+     own loading copy. */
+  if (isBareRoute(pathname)) {
     return <>{children}</>;
   }
 

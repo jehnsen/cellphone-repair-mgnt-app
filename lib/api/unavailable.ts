@@ -240,6 +240,25 @@ export function createUnavailableApi(): ShopApi {
       throw missing("Recording findings", "PUT /tickets/{ulid}/finding");
     },
 
+    /* The diagnosis visualizer. An empty rig is what makes the WebGL-free
+       fallback the *only* thing rendered rather than an empty canvas beside
+       it — the panel checks for parts before offering the 3D view at all. */
+    async getDeviceParts() {
+      return [];
+    },
+    async getIssueCatalog() {
+      return { problem_tag: [], defect: [] };
+    },
+    async getDiagnosisSnapshots() {
+      return [];
+    },
+    async saveDiagnosisSnapshot() {
+      throw missing(
+        "Saving a diagnosis snapshot",
+        "POST /tickets/{ulid}/diagnosis-snapshots",
+      );
+    },
+
     /* Config surfaces. The live client (`createSettingsApi`) overrides these
        whenever the account can reach them; the floor answers empty for a read
        and fails loudly for a write, same as everywhere else. */

@@ -332,6 +332,100 @@ export interface RepairFinding {
   updatedAt: ISODate;
 }
 
+/* ── The diagnosis visualizer ───────────────────────────────────────── */
+
+/**
+ * Which controlled vocabulary an issue key belongs to.
+ *
+ * The shop keeps two, and the visualizer maps parts for both rather than
+ * inventing a third: `problem_tag` is what the customer said at intake
+ * (`ProblemTag`), `defect` is what the technician found (`DefectArea`). The
+ * two overlap — "screen" and "battery" are in both — so a key only means
+ * something alongside its source.
+ */
+export type IssueSource = "problem_tag" | "defect";
+
+/** How the parts group in the explore-mode filter. */
+export type PartCategory =
+  | "display"
+  | "power"
+  | "camera"
+  | "audio"
+  | "connectivity"
+  | "structural"
+  | "board";
+
+/**
+ * One part of the generic phone rig.
+ *
+ * Geometry comes from the server rather than being hardcoded in the scene, so
+ * adding a part is a row rather than a deploy. Millimetres against a nominal
+ * 150 x 72 x 8 mm handset, origin at the centre of the slab, +x right, +y up
+ * the screen, +z out of the display face. It is not any particular phone —
+ * it is the shape every phone shares, which is all that is needed to point
+ * at a battery.
+ */
+export interface DevicePart {
+  id: ID;
+  key: string;
+  label: string;
+  category: PartCategory;
+  /** Plain language, for the customer reading over the technician's shoulder. */
+  blurb?: string;
+  position: Vec3;
+  size: Vec3;
+  /** Direction this part travels in the explode view, and how far at full extension. */
+  explode: Vec3 & { distance: number };
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** One entry in the issue picker, carrying the parts it implicates. */
+export interface DiagnosisIssue {
+  source: IssueSource;
+  key: string;
+  label: string;
+  /** Ordered — the first is the part the technician means. */
+  partKeys: string[];
+}
+
+/** Both vocabularies, as `/issue-types` returns them. */
+export interface IssueCatalog {
+  problem_tag: DiagnosisIssue[];
+  defect: DiagnosisIssue[];
+}
+
+/** Where the camera was when a snapshot was taken. */
+export interface CameraState extends Vec3 {
+  target?: Vec3;
+}
+
+/**
+ * What the customer was shown when they agreed to the quote.
+ *
+ * Append-only: the live view is rebuilt from the finding every time it opens,
+ * so it moves when the finding is revised. A snapshot is the one that cannot.
+ */
+export interface DiagnosisSnapshot {
+  id: ID;
+  issueSource: IssueSource;
+  issueKeys: string[];
+  partKeys: string[];
+  camera?: CameraState;
+  note?: string;
+  /** Short-TTL signed URL; re-fetch the list rather than storing it. */
+  imageUrl?: string;
+  capturedBy?: ID;
+  capturedByName?: string;
+  createdAt: ISODate;
+}
+
 export interface WarrantySlip {
   claimCode: string;
   scope: string;
@@ -347,6 +441,16 @@ export interface Ticket {
   ticketNo: string;
   /** Short code printed on the claim stub and scanned at release. */
   claimCode: string;
+  /**
+   * Backs the shop's public links — the chain-of-custody proof, and the
+   * read-only diagnosis view a technician sends the customer.
+   *
+   * Only present on ticket *detail*: the list resource omits it, and the
+   * server withholds it from a caller without `tickets.view`. Absent is
+   * therefore normal, not an error — the share action hides rather than
+   * offering a link that would 404.
+   */
+  verificationToken?: string;
   status: TicketStatus;
   customerId: ID;
   device: DeviceInfo;

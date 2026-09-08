@@ -24,12 +24,21 @@ import type {
   PaymentDto,
   UserDto,
   RepairFindingDto,
+  DevicePartDto,
+  DiagnosisIssueDto,
+  IssueCatalogDto,
+  DiagnosisSnapshotDto,
 } from "@/lib/api/dto";
 import type {
   BranchProfile,
   BranchSummary,
+  CameraState,
   ConditionCheck,
   Customer,
+  DevicePart,
+  DiagnosisIssue,
+  DiagnosisSnapshot,
+  IssueCatalog,
   DeviceBrand,
   DeviceModel,
   DeviceType,
@@ -348,6 +357,7 @@ export function toTicket(dto: RepairTicketDto, extras: TicketExtras = {}): Ticke
     id: dto.ulid,
     ticketNo: dto.ticket_number,
     claimCode: dto.claim_code,
+    verificationToken: dto.verification_token ?? undefined,
     status,
     customerId: dto.customer?.ulid ?? "",
     device: {
@@ -716,5 +726,61 @@ export function toRepairFinding(dto: RepairFindingDto): RepairFinding {
     recordedBy: dto.recorded_by?.ulid ?? "",
     createdAt: dto.created_at ?? new Date().toISOString(),
     updatedAt: dto.updated_at ?? dto.created_at ?? new Date().toISOString(),
+  };
+}
+
+
+/* ── The diagnosis visualizer ───────────────────────────────────────── */
+
+export function toDevicePart(dto: DevicePartDto): DevicePart {
+  return {
+    id: dto.ulid,
+    key: dto.key,
+    label: dto.label,
+    category: dto.category as DevicePart["category"],
+    blurb: dto.blurb ?? undefined,
+    position: dto.position,
+    size: dto.size,
+    explode: dto.explode,
+    sortOrder: dto.sort_order ?? 0,
+    isActive: dto.is_active ?? true,
+  };
+}
+
+function toDiagnosisIssue(dto: DiagnosisIssueDto): DiagnosisIssue {
+  return {
+    source: dto.source as DiagnosisIssue["source"],
+    key: dto.key,
+    label: dto.label,
+    partKeys: dto.part_keys ?? [],
+  };
+}
+
+export function toIssueCatalog(dto: IssueCatalogDto): IssueCatalog {
+  return {
+    problem_tag: (dto.problem_tag ?? []).map(toDiagnosisIssue),
+    defect: (dto.defect ?? []).map(toDiagnosisIssue),
+  };
+}
+
+export function toDiagnosisSnapshot(dto: DiagnosisSnapshotDto): DiagnosisSnapshot {
+  return {
+    id: dto.ulid,
+    issueSource: dto.issue_source as DiagnosisSnapshot["issueSource"],
+    issueKeys: dto.issue_keys ?? [],
+    partKeys: dto.part_keys ?? [],
+    camera: dto.camera
+      ? ({
+          x: dto.camera.x,
+          y: dto.camera.y,
+          z: dto.camera.z,
+          target: dto.camera.target ?? undefined,
+        } satisfies CameraState)
+      : undefined,
+    note: dto.note ?? undefined,
+    imageUrl: dto.signed_url ?? undefined,
+    capturedBy: dto.captured_by?.ulid,
+    capturedByName: dto.captured_by?.name,
+    createdAt: dto.created_at ?? new Date().toISOString(),
   };
 }

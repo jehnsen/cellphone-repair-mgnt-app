@@ -33,6 +33,7 @@ import {
 import { EmptyState, ErrorState, LoadingRows } from "@/components/ui/states";
 import { TagHead } from "@/components/tag/tag-head";
 import { FindingPanel } from "@/components/ticket/finding-panel";
+import { DiagnosisVisualizer } from "@/components/diagnosis/diagnosis-visualizer";
 import { PaymentDialog } from "@/components/ticket/payment-dialog";
 import { AssignTechnicianDialog } from "@/components/ticket/assign-technician-dialog";
 import { useQuery, useShop } from "@/lib/shop/store";
@@ -254,6 +255,19 @@ export function TicketView({ ticketId }: { ticketId: string }) {
             finding={finding}
             readOnly={ticket.status === "released"}
             onSaved={(next) => {
+              setLocalFinding(next);
+              refetchFinding();
+              refetch();
+            }}
+          />
+
+          {/* Sits directly under the findings it reads from, and above the
+              reported problem it falls back to. */}
+          <DiagnosisVisualizer
+            ticket={ticket}
+            finding={finding}
+            readOnly={ticket.status === "released"}
+            onFindingSaved={(next) => {
               setLocalFinding(next);
               refetchFinding();
               refetch();

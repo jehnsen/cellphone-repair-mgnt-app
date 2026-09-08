@@ -7,10 +7,15 @@ import type {
   Role,
   ConditionCheck,
   Customer,
+  CameraState,
   DefectArea,
   DeviceBrand,
   DeviceInfo,
   DeviceModel,
+  DevicePart,
+  DiagnosisSnapshot,
+  IssueCatalog,
+  IssueSource,
   Discount,
   HandsetCondition,
   HandsetUnitStatus,
@@ -284,6 +289,22 @@ export interface SaveFindingInput {
   technicianNotes?: string;
   qcPassed?: boolean;
   actorId: ID;
+}
+
+export interface SaveDiagnosisSnapshotInput {
+  ticketId: ID;
+  /** The rendered canvas, already a PNG. Multipart, like a ticket photo. */
+  image: Blob;
+  issueSource: IssueSource;
+  issueKeys: string[];
+  /**
+   * The parts actually highlighted, resolved at capture time. Sent rather
+   * than re-derived server-side, because the point of a snapshot is that it
+   * does not move when the mapping behind it does.
+   */
+  partKeys: string[];
+  camera?: CameraState;
+  note?: string;
 }
 
 /**
@@ -755,6 +776,21 @@ export interface ShopApi {
   getFinding(ticketId: ID): Promise<RepairFinding | null>;
   /** Upsert: creates on first save, updates thereafter. */
   saveFinding(input: SaveFindingInput): Promise<RepairFinding>;
+
+  /* ── The diagnosis visualizer ──────────────────────────────────────
+     Pointing at the part rather than naming it. Note there is no
+     `getDiagnosis` / `saveDiagnosis` pair here: the diagnosis *is* the
+     ticket's finding (and, before one is recorded, the intake problem
+     tags), so it is read and written through the two methods above. What
+     follows is only what turns that into something to draw. */
+
+  /** The generic phone rig, active parts in assembly order. Shop-wide. */
+  getDeviceParts(): Promise<DevicePart[]>;
+  /** Both issue vocabularies, each entry carrying the parts it implicates. */
+  getIssueCatalog(): Promise<IssueCatalog>;
+  /** What the customer was shown, newest first. Append-only. */
+  getDiagnosisSnapshots(ticketId: ID): Promise<DiagnosisSnapshot[]>;
+  saveDiagnosisSnapshot(input: SaveDiagnosisSnapshotInput): Promise<DiagnosisSnapshot>;
   markReadyForPickup(input: { ticketIds: ID[]; actorId: ID }): Promise<Ticket[]>;
   /** Scan-and-match the unit before it leaves — chain-of-custody
    *  documentation, *not* a release gate: the server dropped the IMEI half of

@@ -108,6 +108,8 @@ export interface RepairTicketDto {
   ulid: string;
   ticket_number: string;
   claim_code: string;
+  /** Detail only, and only for a caller who may view tickets. */
+  verification_token?: string | null;
   status: string;
   device: {
     brand?: string | null;
@@ -393,6 +395,54 @@ export interface RepairFindingDto {
   recorded_by?: { ulid: string; name?: string } | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+/** `GET /device-parts` — the generic phone rig the visualizer draws. */
+export interface DevicePartDto {
+  ulid: string;
+  key: string;
+  label: string;
+  category: string;
+  blurb?: string | null;
+  position: { x: number; y: number; z: number };
+  size: { x: number; y: number; z: number };
+  explode: { x: number; y: number; z: number; distance: number };
+  sort_order?: number | null;
+  is_active?: boolean | null;
+}
+
+/** One entry of `GET /issue-types`, in either vocabulary. */
+export interface DiagnosisIssueDto {
+  source: string;
+  key: string;
+  label: string;
+  part_keys?: string[] | null;
+}
+
+/** `GET /issue-types` — both vocabularies in one call. */
+export interface IssueCatalogDto {
+  problem_tag?: DiagnosisIssueDto[] | null;
+  defect?: DiagnosisIssueDto[] | null;
+}
+
+/** `GET|POST /tickets/{ulid}/diagnosis-snapshots`. */
+export interface DiagnosisSnapshotDto {
+  ulid: string;
+  issue_source: string;
+  issue_keys?: string[] | null;
+  part_keys?: string[] | null;
+  camera?: {
+    x: number;
+    y: number;
+    z: number;
+    target?: { x: number; y: number; z: number } | null;
+  } | null;
+  note?: string | null;
+  sha256_hash?: string | null;
+  /** Short-TTL; the list is re-fetched rather than the URL being cached. */
+  signed_url?: string | null;
+  captured_by?: { ulid: string; name?: string } | null;
+  created_at?: string | null;
 }
 
 /** `GET /dashboard` — the landing summary, computed in SQL. */

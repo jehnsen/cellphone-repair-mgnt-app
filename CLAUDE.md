@@ -266,6 +266,70 @@ re-read rather than counting the cache — overdue, ready, and drawer are the
 numbers the shop is run on, and a count that lags an action is worse than a slow
 one.
 
+### The diagnosis visualizer
+
+A 3D phone on the ticket page, so a technician can point at the digitizer
+instead of saying "digitizer". `components/diagnosis/`, embedded in
+`app/board/[id]/ticket-view.tsx` — not a route of its own, because it is
+reached mid-sentence with a customer at the counter.
+
+**There is no separate diagnosis record, and that is deliberate.**
+`repair_findings` already is one: one row per ticket, a `defects` array from a
+controlled vocabulary, upserted through `PUT /tickets/{ulid}/finding`. The
+visualizer reads and writes *that*, so the shop keeps one answer to "what is
+wrong with this unit". Before a finding exists it falls back to the ticket's
+intake `problemTags` — the customer's own words, drawable but not a diagnosis,
+which is why confirming is disabled on that vocabulary. `issuesForTicket()` in
+`lib/diagnosis.ts` makes that choice, and the server's
+`PublicVerificationController::issuesFor` mirrors it exactly.
+
+One consequence to know: the server requires a `root_cause` and a `resolution`
+on every finding, and a diagnosis made at the counter does not know the
+resolution yet. So `ConfirmDiagnosisDialog` asks for both rather than inventing
+them. If the vocabulary ever grows a "diagnosed, not yet worked" resolution,
+that dialog is what should shrink.
+
+What *is* new is the drawing: `device_parts` (the generic rig, geometry
+included) and `issue_part_map` (which parts an issue key implicates, ranked),
+both read through `getDeviceParts()` / `getIssueCatalog()`. Snapshots —
+`ticket_diagnosis_snapshots` — freeze the image *and* the part selection at the
+moment a customer agreed, because the live view is rebuilt from the finding and
+moves when the finding is revised.
+
+Things that bit, and will bite again:
+
+- **One generic rig, not one per SKU.** Geometry is server data in
+  millimetres against a nominal 150 x 72 x 8 mm slab, so adding a part is a row
+  (`DevicePartSeeder`), not a deploy. No handset is modelled and none should be.
+- **`next/dynamic` does not forward refs.** three.js is code-split behind
+  `dynamic(..., { ssr: false })` — there is no WebGL context during SSR — so
+  `PhoneScene` takes a `handleRef` *prop*. A `ref` on it stays null, and the
+  snapshot button silently has nothing to capture.
+- **`preserveDrawingBuffer: true` is load-bearing**, not a nicety: without it
+  `canvas.toBlob()` comes back empty on most drivers, and it fails quietly.
+- **Frame the device, not the part.** Zooming to the implicated part fills the
+  screen with a coloured rectangle that could be anything; the part only means
+  something inside the outline of the phone. Hence the modest `FRAME_BIAS`, and
+  a separate, further-back framing for explore mode.
+- **Illumination is not a surface token.** Colouring the key light with
+  `--paper` made the whole rig flat in dark mode, where `--paper` is near-black.
+  Lights are pinned white; only the *parts* read tokens.
+- **Ghosted parts still have a job.** The isolation opacity floor (~0.17) is
+  what keeps a phone-shaped silhouette around the highlighted part. Lower, and
+  against the dark theme the body disappears.
+- Parts carry no hue — colour is spent on the fault (`--stamp`) alone, per the
+  design system's rule. Category is a value ramp plus a filter, never a tint.
+- Every screen owes a WebGL-free fallback: `hasWebGL()` is checked before
+  three.js is imported, and `PartsFallbackList` carries the same information as
+  a labelled list. Old shop tablets and kiosk browsers are real.
+
+The customer-facing read-only view is `app/verify/[token]`, backed by
+`GET /public/verify/{token}/diagnosis` — unauthenticated, redacted (no pricing,
+no PII, no claim code, no bench notes), and riding on the ticket's *existing*
+verification token rather than a second link type. It is a `BARE_ROUTE` in
+`app-shell.tsx`: the person opening it has no session and must not be sent to
+`/login`.
+
 ### Domain rules that live in one place
 
 Don't reimplement these inline:
@@ -405,9 +469,12 @@ it. That panel's circuit traces and its two pools of screen light are literal
 ## Verifying UI work
 
 There's no browser tool wired up, but Chrome is installed and works headless.
-This machine is **macOS**; Chrome is at
-`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. Quote
-`"--remote-allow-origins=*"` — zsh globs the bare flag and the launch fails.
+This machine is **Windows**; Chrome is at
+`C:\Program Files\Google\Chrome\Application\chrome.exe` (`/c/Program
+Files/...` from the Bash tool). Quote `"--remote-allow-origins=*"` — a bare
+flag gets globbed and the launch fails. Headless Chrome has no GPU here, so
+pass `--enable-unsafe-swiftshader` or WebGL is unavailable and anything using
+`app/board/[id]`'s 3D view silently renders its text fallback instead.
 
 The one-shot `--screenshot=` flag is unreliable here (and `--headless=new`
 ignores it). What works: launch with `--headless=new --remote-debugging-port=9222
@@ -419,9 +486,17 @@ nest the payload at `msg.result.result.value` for `Runtime.evaluate`; unwrap it.
 for accurate mobile widths.
 
 **A real Laravel API is already running on this machine** at
-`http://127.0.0.1:8000/api/v1` with a seeded shop. Sign in through the app's own
-`/login` form (`nelson.bonalos@gmail.com` / `password`, an owner), or
-`POST /auth/token` for a bearer token to probe endpoints directly. Because it is
+`http://127.0.0.1:8000/api/v1` with a seeded shop, its source in
+`../../cellphone-repair-mgnt-backend` (Laravel + Pest; `./vendor/bin/pest`).
+Sign in through the app's own `/login` form (`ricardo.santos@fixmo.test` /
+`password`, the seeded owner — the whole roster is `*@fixmo.test`), or
+`POST /auth/token` for a bearer token to probe endpoints directly.
+
+**Drive the app on `http://localhost:3000` or `:3001` and nowhere else.** The
+API's `CORS_ALLOWED_ORIGINS` lists exactly those two, by hostname — a headless
+browser pointed at `127.0.0.1` on any port, or at `localhost` on some other
+port, fails every request at the CORS preflight and the app just sits on the
+login screen with no visible error. Because it is
 the real shop DB, treat writes as real: void a stray probe sale
 (`POST /sales/{ulid}/void` needs `void_reason`), delete a throwaway
 brand/model/service. `next dev` falls back to **port 3001** when a stale server

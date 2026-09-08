@@ -92,6 +92,13 @@ const BRANCH_AGNOSTIC = [
   "/device-models",
   "/product-categories",
   "/suppliers",
+  /* The visualizer's rig and issue mapping are shop-wide reference data —
+     a battery is a battery at either site. */
+  "/device-parts",
+  "/issue-types",
+  /* Unauthenticated, so there is no branch to scope to and no token to
+     prove one with; sending the param would only be a 400. */
+  "/public/",
 ];
 
 /** How many times a throttled GET is retried before the error surfaces. */
