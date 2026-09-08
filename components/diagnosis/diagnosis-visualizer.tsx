@@ -14,7 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState, LoadingRows } from "@/components/ui/states";
 import { IssuePicker } from "@/components/diagnosis/issue-picker";
 import { DiagnosisSummaryPanel } from "@/components/diagnosis/diagnosis-summary-panel";
-import { ExploreControls } from "@/components/diagnosis/explore-controls";
+import {
+  ExplodeSlider,
+  ExploreControls,
+} from "@/components/diagnosis/explore-controls";
 import { SnapshotButton } from "@/components/diagnosis/snapshot-button";
 import { ShareLinkButton } from "@/components/diagnosis/share-link-button";
 import { PartsFallbackList } from "@/components/diagnosis/parts-fallback-list";
@@ -276,6 +279,18 @@ function VisualizerBody({
               reason={noParts ? "no-parts" : "no-webgl"}
             />
           )}
+
+          {/* Under the canvas rather than over in the picker column: it moves
+              what is directly above it, and a technician mid-sentence should
+              not have to look away from the phone to find it. Only when there
+              is a scene — there is nothing to take apart in the fallback. */}
+          {state.mode === "diagnosis" && showScene ? (
+            <ExplodeSlider
+              id="diagnosis-explode-slider"
+              explode={state.explode}
+              onExplode={(value) => dispatch({ type: "explode", value })}
+            />
+          ) : null}
 
           {state.mode === "diagnosis" ? (
             <DiagnosisSummaryPanel

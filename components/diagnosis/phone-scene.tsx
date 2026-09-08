@@ -2,7 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { Environment, Lightformer, OrbitControls } from "@react-three/drei";
 import { TOUCH, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { PhoneModel } from "@/components/diagnosis/phone-model";
@@ -73,6 +73,7 @@ const EXPLORE_DISTANCE = 8.6;
 function framingFor(
   part: DevicePart | null,
   mode: DiagnosisMode,
+  explode: number,
 ): {
   position: Vector3;
   target: Vector3;
@@ -87,9 +88,23 @@ function framingFor(
     };
   }
 
+  /* Diagnosis can now open the device up too, and a rig framed for an
+     assembled phone spills straight out of shot as it does. So the distance
+     eases from the diagnosis framing toward the explore one as the slider
+     moves — the same reason EXPLORE_DISTANCE exists, applied continuously
+     rather than as a mode switch. */
+  const distance =
+    FRAME_DISTANCE + (EXPLORE_DISTANCE - FRAME_DISTANCE) * explode;
+
   if (!part) {
+    const direction = new Vector3(...DEFAULT_CAMERA);
     return {
-      position: new Vector3(...DEFAULT_CAMERA),
+      /* Only pulls back once the device is actually opening; at rest this is
+         exactly the DEFAULT_CAMERA framing it has always been. */
+      position: direction
+        .clone()
+        .normalize()
+        .multiplyScalar(direction.length() + (distance - FRAME_DISTANCE)),
       target: new Vector3(0, 0, 0),
     };
   }
@@ -110,7 +125,7 @@ function framingFor(
   ).normalize();
 
   return {
-    position: target.clone().add(facing.multiplyScalar(FRAME_DISTANCE)),
+    position: target.clone().add(facing.multiplyScalar(distance)),
     target,
   };
 }
@@ -123,25 +138,51 @@ function framingFor(
 function CameraRig({
   focusPart,
   mode,
+  explode,
   controls,
   requestId,
 }: {
   focusPart: DevicePart | null;
   mode: DiagnosisMode;
+  explode: number;
   controls: React.RefObject<OrbitControlsImpl | null>;
   requestId: number;
 }) {
   const { camera } = useThree();
-  const desired = useRef(framingFor(focusPart, mode));
+  const desired = useRef(framingFor(focusPart, mode, explode));
   const settling = useRef(false);
 
   /* Re-framing on a mode change is not a nicety: the two modes need very
      different distances, and keeping the diagnosis framing into explore
      leaves the exploded rig spilling off every edge. */
   useEffect(() => {
-    desired.current = framingFor(focusPart, mode);
+    desired.current = framingFor(focusPart, mode, explode);
     settling.current = true;
+    /* `explode` deliberately absent: dragging the slider must not haul the
+       camera back to the default angle on every tick. Its effect on distance
+       is applied below, on the framing the user is already looking from. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusPart, mode, requestId]);
+
+  /* Distance follows the slider even after the technician has orbited away —
+     the whole device still has to stay in shot as it opens — but it is applied
+     as a nudge along their own view direction rather than by re-aiming, so it
+     never fights a camera they have positioned themselves. */
+  useEffect(() => {
+    desired.current = framingFor(focusPart, mode, explode);
+    if (settling.current) return;
+
+    const orbit = controls.current;
+    const target = orbit?.target ?? new Vector3(0, 0, 0);
+    const wanted = desired.current.position.distanceTo(
+      desired.current.target,
+    );
+    const direction = camera.position.clone().sub(target);
+    if (direction.lengthSq() < 1e-6) return;
+
+    camera.position.copy(target).add(direction.setLength(wanted));
+    orbit?.update();
+  }, [explode, focusPart, mode, camera, controls]);
 
   useEffect(() => {
     const orbit = controls.current;
@@ -283,9 +324,55 @@ export function PhoneScene({
           `--paper` is near-black in dark mode, so the key light contributed
           essentially nothing and the whole rig went flat. Illumination is not
           a surface. */}
-      <ambientLight intensity={1.05} />
-      <directionalLight position={[4, 6, 8]} intensity={1.6} color="#ffffff" />
+      <ambientLight intensity={0.85} />
+      <directionalLight position={[4, 6, 8]} intensity={1.35} color="#ffffff" />
       <directionalLight position={[-5, -2, -6]} intensity={0.7} color="#dfe6ff" />
+      {/* A soft rim from below-front, so the rounded edge of every part picks
+          up a line and the bevels are visible as bevels. Low enough that it
+          lifts a silhouette without modelling anything into shadow. */}
+      <directionalLight position={[0, -4, 5]} intensity={0.45} color="#ffffff" />
+
+      {/* Metalness and clearcoat need something to *reflect*: with no
+          environment a brushed-aluminium frame and a glass front both resolve
+          to the same flat grey, which is the exact failure this scene is
+          trying to get away from.
+
+          Built from Lightformers rather than `preset=` on purpose. A drei
+          preset fetches an HDR from raw.githack.com at runtime — a network
+          round trip to a third-party CDN before the canvas can finish, on
+          hardware that is often an old tablet on shop wifi, and a blank scene
+          if it fails. This rig is three emissive planes; it costs no request
+          and cannot fail offline.
+
+          White, and only white. A tinted reflection would put hue on the
+          parts, and hue in this scene means fault. */}
+      <Environment resolution={128} frames={1}>
+        {/* Broad soft key above, the dominant reflection. */}
+        <Lightformer
+          intensity={1.6}
+          position={[0, 4, 3]}
+          rotation={[-Math.PI / 3, 0, 0]}
+          scale={[10, 6, 1]}
+          color="#ffffff"
+        />
+        {/* Two narrow strips down the sides — these are what draw the long
+            highlight along a rounded edge, and the single clearest cue that a
+            part has a bevel rather than a corner. */}
+        <Lightformer
+          intensity={1.1}
+          position={[-5, 1, 2]}
+          rotation={[0, Math.PI / 2, 0]}
+          scale={[6, 3, 1]}
+          color="#ffffff"
+        />
+        <Lightformer
+          intensity={0.9}
+          position={[5, 0, 1]}
+          rotation={[0, -Math.PI / 2, 0]}
+          scale={[6, 3, 1]}
+          color="#f2f5ff"
+        />
+      </Environment>
 
       <PhoneModel
         parts={parts}
@@ -301,6 +388,7 @@ export function PhoneScene({
       <CameraRig
         focusPart={focusPart}
         mode={mode}
+        explode={explode}
         controls={controls}
         requestId={reframeId}
       />

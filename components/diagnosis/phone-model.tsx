@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Color } from "three";
 import { PartMesh, type PartVisual } from "@/components/diagnosis/part-mesh";
+import { PhoneShell } from "@/components/diagnosis/phone-shell";
 import { CATEGORY_TONE, type ScenePalette } from "@/components/diagnosis/palette";
 import { ISOLATION_LIFT } from "@/lib/diagnosis";
 import type { DevicePart, PartCategory } from "@/lib/types";
@@ -45,12 +46,16 @@ export function PhoneModel({
   palette: ScenePalette;
   onSelectPart: (key: string) => void;
 }) {
+  /* Nothing selected is not the same as everything dimmed. With no diagnosis
+     yet the device should just look like a device — dimming the whole rig
+     would read as "all of it is broken". Lifted out of the memo below because
+     the cosmetic shell needs it too: the frame has to stand back when a single
+     part is being pointed at. */
+  const isolating =
+    mode === "diagnosis" && highlightedPartKeys.length > 0;
+
   const visuals = useMemo(() => {
     const highlighted = new Set(highlightedPartKeys);
-    /* Nothing selected is not the same as everything dimmed. With no
-       diagnosis yet the device should just look like a device — dimming the
-       whole rig would read as "all of it is broken". */
-    const isolating = mode === "diagnosis" && highlighted.size > 0;
 
     return new Map<string, PartVisual>(
       parts.map((part) => {
@@ -59,16 +64,25 @@ export function PhoneModel({
         const inFilter =
           categoryFilter === "all" || part.category === categoryFilter;
 
-        /* Diagnosis mode lifts the implicated part just clear of the chassis
-           so it is visibly a separate object; explore mode pulls everything
-           apart along its own vector. The two never compound — explode is
-           forced to 0 when the mode changes. */
+        /* Explore pulls everything apart along its own vector. Diagnosis lifts
+           the implicated part just clear of the chassis so it is visibly a
+           separate object — and, once the technician reaches for the slider,
+           opens the rest of the device up around it.
+
+           The two are blended rather than added. Adding them sends the
+           highlighted part further out than anything else at full extension,
+           which breaks the one thing the exploded view is for: showing where
+           the part sits *in the stack*. Taking the larger of the two keeps the
+           lift meaningful while the device is nearly shut, and lets the real
+           explode distance take over as it opens — so the part never overshoots
+           its own place in the teardown. */
         const travel =
           mode === "explore"
             ? explode * part.explode.distance
-            : isHighlighted
-              ? ISOLATION_LIFT * part.explode.distance
-              : 0;
+            : Math.max(
+                explode,
+                isHighlighted ? ISOLATION_LIFT : 0,
+              ) * part.explode.distance;
 
         const offset: [number, number, number] = [
           part.position.x + part.explode.x * travel,
@@ -127,6 +141,16 @@ export function PhoneModel({
 
   return (
     <group>
+      {/* Cosmetic only — never selectable, never highlighted, never in the
+          parts list. It is the outline that makes the catalog's stack of
+          plates read as a handset. */}
+      <PhoneShell
+        palette={palette}
+        explode={explode}
+        isolating={isolating}
+        visible={parts.length > 0}
+      />
+
       {parts.map((part) => (
         <PartMesh
           key={part.key}

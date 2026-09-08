@@ -19,7 +19,9 @@ export type DiagnosisMode = "diagnosis" | "explore";
 
 export interface DiagnosisState {
   mode: DiagnosisMode;
-  /** 0 assembled, 1 fully apart. Explore mode only. */
+  /** 0 assembled, 1 fully apart. Used by both modes — a technician opening the
+   *  device up to show where the faulty part sits is the same gesture as
+   *  walking someone through a teardown. */
   explode: number;
   /** Which vocabulary the picker is choosing from. */
   source: IssueSource;
@@ -47,13 +49,15 @@ export type DiagnosisAction =
 function reducer(state: DiagnosisState, action: DiagnosisAction): DiagnosisState {
   switch (action.type) {
     case "mode":
-      /* Leaving explore puts the device back together. Coming back to a
-         half-exploded phone mid-conversation is disorienting, and diagnosis
-         mode does not use the value anyway. */
+      /* Switching mode puts the device back together.
+         Both modes can take the phone apart now, but they are different
+         conversations — "here is what is wrong with yours" and "here is how one
+         of these works" — and arriving in either one already half-open is
+         disorienting. The slider is right there if it is wanted. */
       return {
         ...state,
         mode: action.mode,
-        explode: action.mode === "diagnosis" ? 0 : state.explode,
+        explode: 0,
         inspectedPartKey: null,
       };
 
